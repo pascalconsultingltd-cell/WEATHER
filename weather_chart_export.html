@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hourly weather chart (export)</title>
+<style>
+/* Colour tokens, light + dark. Chart colours: wind green, rain grey, temperature gold (GOLD/GREY consts in the script). */
+:root {
+  --bg: #eaf0f4;
+  --surface: #ffffff;
+  --fg: #13212b;
+  --muted: #566878;
+  --line: #d3dde4;
+  --accent: #1d6e8c;
+  --accent-soft: #d9ecf3;
+  --wind: #14b24c;
+  --temp: #f07a00;
+  --rain: #2f6fd1;
+  --night: #0a4a96;
+  --hol: #c2308f;
+  --warn: #a9531a;
+  --warn-soft: #f6e4d6;
+  --school: #3b5bb0;
+  --font-display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "DM Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1a22; --surface: #162630; --fg: #e5eef3; --muted: #92a6b3;
+    --line: #28404d; --accent: #62bcdb; --accent-soft: #1b3a47;
+    --wind: #3ddc84; --temp: #ffa033; --rain: #8fb0ff; --night: #2f78c8; --hol: #ff8fd6;
+    --warn: #e59a62; --warn-soft: #3a2a1d; --school: #9db4f0; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1a22; --surface: #162630; --fg: #e5eef3; --muted: #92a6b3;
+  --line: #28404d; --accent: #62bcdb; --accent-soft: #1b3a47;
+  --wind: #3ddc84; --temp: #ffa033; --rain: #8fb0ff; --night: #2f78c8; --hol: #ff8fd6;
+  --warn: #e59a62; --warn-soft: #3a2a1d; --school: #9db4f0; color-scheme: dark;
+}
+
+body { margin:0; background:var(--bg); color:var(--fg); font-family:var(--font-body); font-size:13.5px; }
+.wrap { max-width:520px; margin:0 auto; padding:16px; }
+h1 { font:700 20px var(--font-display); margin:0 0 8px; }
+.chart svg { display:block; width:100%; height:auto; background:var(--surface); border:1px solid var(--line); border-radius:8px; }
+</style></head><body>
+<main class="wrap">
+<h1>Hourly weather</h1>
+<!-- Export notes:
+ - One chart = one day. Edit the arrays at the top of the script: HOURS, WIND, GUST (km/h), RAIN (%, use 3 for under 5, values under 5 draw no fill), TEMP (C), DIR (bearing wind comes FROM, degrees), ICON (emoji per hour), SUNRISE/SUNSET (decimal hours).
+ - For a full week: wrap the IIFE in a function drawDay(svgId, data) and call it once per day with a different <svg id>. Note the SVG ids wxg, wxstrong, wxrain, wxnr, wxns must be made unique per chart (append the day index).
+ - Wind direction arrows point where the wind blows TO (DIR + 180). -->
+<div class="chart"><svg id="wxchart" viewBox="0 0 380 330" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Hourly forecast chart"></svg></div>
+</main>
+<script>
+(function () {
+  // Replace these arrays each day (07:00 to 23:00). Wind and gusts in km/h. RAIN uses 3 for "under 5%".
+  var HOURS = [7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23];
+  var WIND  = [13,13,14,14,14,14,13,11,11,11,11,10,6,5,5,6,10];
+  var GUST  = [32,35,37,39,40,40,37,35,34,31,27,18,14,16,18,21,21];
+  var RAIN  = [3,3,3,3,3,3,3,3,3,3,3,3,3,3,20,40,70];
+  var TEMP  = [8,8,9,10,11,13,14,15,15,15,15,14,14,13,12,12,12];
+  var STRONG = 25;   // km/h: the wind/gust band is drawn darker above this level
+  var SUNRISE = 7.2, SUNSET = 18.37;   // decimal local hours (07:12, 18:22); night is shaded outside this range
+  var DIR   = [315,315,315,315,315,315,315,315,315,315,292.5,292.5,270,225,225,225,225];   // wind comes FROM this bearing (SW=225, W=270); arrows point where it blows to
+  var ICON  = ["☀️", "☀️", "☀️", "☀️", "☀️", "☀️", "☀️", "☀️", "⛅", "☀️", "☀️", "🌤️", "🌙", "☁️", "☁️", "🌧️", "🌧️"];
+  var W = 380, H = 330, L = 24, R = 50, T = 38, B = 18, ih = H - T - B;
+  var n = HOURS.length, step = (W - L - R) / n;
+  var maxG = Math.max.apply(null, GUST);
+  var WMAX = Math.max(30, Math.ceil(maxG / 30) * 30);              // 3 gridline intervals
+  var RMAX = Math.min(100, Math.max(30, Math.ceil(Math.max.apply(null, RAIN) / 30) * 30));
+  var TMIN = Math.floor(Math.min.apply(null, TEMP) / 5) * 5 - 0;
+  var TSTEP = Math.max(5, Math.ceil((Math.max.apply(null, TEMP) - TMIN) / 3 / 5) * 5);
+  var TMAX = TMIN + TSTEP * 3;
+  var GOLD = '#e0a800', GREY = '#7d8993';
+  var mono = 'font-family="DM Mono, monospace"';
+  function x(i) { return L + (i + 0.5) * step; }
+  function yW(v) { return T + ih - (v / WMAX) * ih; }
+  function yR(v) { return T + ih - (v / RMAX) * ih; }
+  function yT(v) { return T + ih - ((v - TMIN) / (TMAX - TMIN)) * ih; }
+  function clampY(y) { return Math.min(T + ih, Math.max(T, y)); }
+  function curve(pts, cont) {
+    var d = (cont ? ' L' : 'M') + pts[0][0] + ',' + pts[0][1];
+    for (var i = 0; i < pts.length - 1; i++) {
+      var p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+      var c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = clampY(p1[1] + (p2[1] - p0[1]) / 6);
+      var c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = clampY(p2[1] - (p3[1] - p1[1]) / 6);
+      d += ' C' + c1x + ',' + c1y + ' ' + c2x + ',' + c2y + ' ' + p2[0] + ',' + p2[1];
+    }
+    return d;
+  }
+  var out = '';
+  function xt(t) { return Math.min(W - R, Math.max(L, x(0) + (t - HOURS[0]) * step)); }
+  var nTop = 2, nH = T + ih - nTop;
+  // night shading melts in and out around sunrise and sunset (soft gradient, no hard edge)
+  var MELT = 0.7;   // hours of fade each side of the boundary
+  function nightRect(id, xa, xb, op0, op1, mid) {
+    out += '<defs><linearGradient id="' + id + '" gradientUnits="userSpaceOnUse" x1="' + xa + '" x2="' + xb + '" y1="0" y2="0"><stop offset="0" stop-color="var(--night)" stop-opacity="' + op0 + '"/><stop offset="' + mid + '" stop-color="var(--night)" stop-opacity="' + (op0 + op1) / 2 + '"/><stop offset="1" stop-color="var(--night)" stop-opacity="' + op1 + '"/></linearGradient></defs>';
+    out += '<rect x="' + Math.min(xa, xb) + '" y="' + nTop + '" width="' + Math.abs(xb - xa) + '" height="' + nH + '" fill="url(#' + id + ')"/>';
+  }
+  if (SUNRISE > HOURS[0]) {
+    out += '<rect x="' + L + '" y="' + nTop + '" width="' + Math.max(0, xt(SUNRISE - MELT) - L) + '" height="' + nH + '" fill="var(--night)" fill-opacity="0.12"/>';
+    nightRect('wxnr', xt(SUNRISE - MELT), xt(SUNRISE + MELT), 0.12, 0, 0.5);
+  }
+  if (SUNSET < HOURS[n - 1] + 0.5) {
+    nightRect('wxns', xt(SUNSET - MELT), xt(SUNSET + MELT), 0, 0.12, 0.5);
+    out += '<rect x="' + xt(SUNSET + MELT) + '" y="' + nTop + '" width="' + Math.max(0, W - R - xt(SUNSET + MELT)) + '" height="' + nH + '" fill="var(--night)" fill-opacity="0.12"/>';
+  }
+  for (var g = 0; g <= 3; g++) {
+    var gy = T + ih - (g / 3) * ih;
+    out += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + gy + '" y2="' + gy + '" stroke="var(--line)" stroke-width="1"/>';
+    out += '<text x="' + (L - 5) + '" y="' + (gy + 3) + '" text-anchor="end" font-size="9" fill="var(--wind)" ' + mono + '>' + Math.round(g / 3 * WMAX) + '</text>';
+    out += '<text x="' + (W - R + 3) + '" y="' + (gy + 3) + '" text-anchor="start" font-size="9" fill="' + GOLD + '" ' + mono + '>' + (TMIN + g * TSTEP) + '°</text>';
+    out += '<text x="' + (W - R + 27) + '" y="' + (gy + 3) + '" text-anchor="start" font-size="9" fill="' + GREY + '" ' + mono + '>' + Math.round(g / 3 * RMAX) + '%</text>';
+  }
+  var wp = WIND.map(function (v, i) { return [x(i), yW(v)]; });
+  var gp = GUST.map(function (v, i) { return [x(i), yW(v)]; });
+  var rp = RAIN.map(function (v, i) { return [x(i), yR(v < 5 ? 0 : v)]; });   // no fill below 5%
+  var tp = TEMP.map(function (v, i) { return [x(i), yT(v)]; });
+  // light green band between the wind curve and the gust curve
+  out += '<path d="' + curve(gp) + curve(wp.slice().reverse(), true) + ' Z" fill="var(--wind)" fill-opacity="0.13" stroke="none"/>';
+  // darker where the band rises above the STRONG level
+  var yS = yW(STRONG);
+  var gy1 = yW(STRONG), gy2 = yW(100);   // 100 km/h sits far above the plot, so the band only reaches the first part of the ramp
+  // ramp: [km/h above STRONG, colour, opacity]; fast early darkening so 5 km/h over STRONG is already visible
+  var RAMP = [[0, 'var(--wind)', 0], [5, '#0f9a40', 0.55], [15, '#0b7a33', 0.8], [35, '#06501f', 0.92], [100 - STRONG, '#010a04', 0.98]];
+  var stops = RAMP.map(function (r) { return '<stop offset="' + (r[0] / (100 - STRONG)) + '" style="stop-color:' + r[1] + '" stop-opacity="' + r[2] + '"/>'; }).join('');
+  out += '<defs><linearGradient id="wxg" gradientUnits="userSpaceOnUse" x1="0" y1="' + gy1 + '" x2="0" y2="' + gy2 + '">' + stops + '</linearGradient></defs>';
+  out += '<clipPath id="wxstrong"><rect x="' + L + '" y="' + T + '" width="' + (W - R - L) + '" height="' + (yS - T) + '"/></clipPath>';
+  out += '<path clip-path="url(#wxstrong)" d="' + curve(gp) + curve(wp.slice().reverse(), true) + ' Z" fill="url(#wxg)" stroke="none"/>';
+  out += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + yS + '" y2="' + yS + '" stroke="var(--wind)" stroke-width="0.9" stroke-dasharray="1 3" stroke-opacity="0.8"/>';
+  out += '<text x="' + (L - 5) + '" y="' + (yS + 3) + '" text-anchor="end" font-size="8" fill="var(--wind)" ' + mono + '>' + STRONG + '</text>';
+  // rain chance filled from the 0 axis so any rain is obvious
+  out += '<path d="' + curve(rp) + ' L' + x(n - 1) + ',' + (T + ih) + ' L' + x(0) + ',' + (T + ih) + ' Z" fill="' + GREY + '" fill-opacity="0.45" stroke="none"/>';
+  // raindrop texture over the grey rain fill: small slanted streaks
+  out += '<defs><pattern id="wxrain" width="7" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(12)"><line x1="2" y1="1" x2="2" y2="5" stroke="#4a5560" stroke-width="1.2" stroke-linecap="round" stroke-opacity="0.75"/><circle cx="5.5" cy="7.5" r="0.9" fill="#4a5560" fill-opacity="0.6"/></pattern></defs>';
+  out += '<path d="' + curve(rp) + ' L' + x(n - 1) + ',' + (T + ih) + ' L' + x(0) + ',' + (T + ih) + ' Z" fill="url(#wxrain)" stroke="none"/>';
+  out += '<path d="' + curve(gp) + '" fill="none" stroke="var(--wind)" stroke-width="1.6" stroke-dasharray="4 3" stroke-linecap="round"/>';
+  out += '<path d="' + curve(wp) + '" fill="none" stroke="var(--wind)" stroke-width="2.6" stroke-linecap="round"/>';
+  (function () { var run = []; function flush() { if (run.length > 1) { out += '<path d="' + curve(run) + '" fill="none" stroke="' + GREY + '" stroke-width="2.4" stroke-linecap="round"/>'; } else if (run.length === 1) { out += '<circle cx="' + run[0][0] + '" cy="' + run[0][1] + '" r="1.8" fill="' + GREY + '"/>'; } run = []; }
+    RAIN.forEach(function (v, i) { if (v >= 5) { run.push([x(i), yR(v)]); } else { flush(); } }); flush(); })();
+  out += '<path d="' + curve(tp) + '" fill="none" stroke="' + GOLD + '" stroke-width="2.8" stroke-linecap="round"/>';
+  // wind-direction arrows riding just above the gust curve
+  GUST.forEach(function (gv, i) {
+    var ay = Math.max(T + 8, yW(gv) - 11), rot = DIR[i] + 180;
+    out += '<g transform="translate(' + x(i) + ',' + ay + ') rotate(' + rot + ')" stroke="#06501f" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M0,5 L0,-5 M-3,-1.5 L0,-5.5 L3,-1.5"/></g>';
+  });
+  var gi = GUST.indexOf(maxG);
+  out += '<text x="' + x(gi) + '" y="' + (yW(maxG) - 4) + '" text-anchor="middle" font-size="9" font-weight="500" fill="var(--wind)" ' + mono + '>' + maxG + '</text>';
+  var maxT = Math.max.apply(null, TEMP), ti = TEMP.indexOf(maxT);
+  out += '<text x="' + x(ti) + '" y="' + (yT(maxT) - 5) + '" text-anchor="middle" font-size="9" font-weight="500" fill="' + GOLD + '" ' + mono + '>' + maxT + '°</text>';
+  // min / max labels: placed clear of the neighbouring curves
+  function idxs(arr, v) { var r = []; arr.forEach(function (a, i) { if (a === v) r.push(i); }); return r; }
+  function put(i, y, txt, col, below) {
+    var ty = below ? y + 12 : y - 5;
+    ty = Math.min(T + ih - 2, Math.max(T + 9, ty));
+    out += '<text x="' + x(i) + '" y="' + ty + '" text-anchor="middle" font-size="9" font-weight="500" fill="' + (col === 'temp' ? GOLD : 'var(--' + col + ')') + '" ' + mono + '>' + txt + '</text>';
+  }
+  var minT = Math.min.apply(null, TEMP);
+  put(idxs(TEMP, minT)[0], yT(minT), minT + '°', 'temp', false);
+  var maxW = Math.max.apply(null, WIND), mxi = idxs(WIND, maxW);
+  put(mxi[Math.floor(mxi.length / 2)], yW(maxW), maxW, 'wind', false);
+  var minW = Math.min.apply(null, WIND), mni = idxs(WIND, minW);
+  put(mni[mni.length - 1], yW(minW), minW, 'wind', false);
+  var minG = Math.min.apply(null, GUST), mgi = idxs(GUST, minG);
+  put(mgi[mgi.length - 1], yW(minG), minG, 'wind', true);
+  HOURS.forEach(function (h, i) {
+    out += '<text x="' + x(i) + '" y="24" text-anchor="middle" font-size="18">' + ICON[i] + '</text>';
+    out += '<text x="' + x(i) + '" y="' + (H - 5) + '" text-anchor="middle" font-size="8" fill="var(--muted)" ' + mono + '>' + (h < 10 ? '0' + h : h) + '</text>';
+  });
+  // sunrise / sunset times, centred on the day/night boundary just below the sky icons
+  function fmt(t) { var h = Math.floor(t), m = Math.round((t - h) * 60); if (m === 60) { h++; m = 0; } return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m; }
+  function sunMark(t) {
+    var bx = xt(t);
+    out += '<text x="' + bx + '" y="36" text-anchor="middle" font-size="8.5" font-weight="500" fill="var(--fg)" ' + mono + '>' + fmt(t) + '</text>';
+  }
+  if (SUNRISE > HOURS[0]) { sunMark(SUNRISE); }
+  if (SUNSET < HOURS[n - 1] + 0.5) { sunMark(SUNSET); }
+  document.getElementById('wxchart').innerHTML = out;
+})();
+</script>
+</body></html>

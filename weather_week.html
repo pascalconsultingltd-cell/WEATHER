@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Hourly weather, 7 days</title>
+<style>
+/* Colour tokens, light + dark. Chart colours: wind green, rain grey, temperature gold (GOLD/GREY consts in the script). */
+:root {
+  --bg: #eaf0f4;
+  --surface: #ffffff;
+  --fg: #13212b;
+  --muted: #566878;
+  --line: #d3dde4;
+  --accent: #1d6e8c;
+  --accent-soft: #d9ecf3;
+  --wind: #14b24c;
+  --temp: #f07a00;
+  --rain: #2f6fd1;
+  --night: #0a4a96;
+  --hol: #c2308f;
+  --warn: #a9531a;
+  --warn-soft: #f6e4d6;
+  --school: #3b5bb0;
+  --weekend: #fbe27a;
+  --sun: #ffc800;
+  --font-display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Instrument Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-data: "DM Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1a22; --surface: #162630; --fg: #e5eef3; --muted: #92a6b3;
+    --line: #28404d; --accent: #62bcdb; --accent-soft: #1b3a47;
+    --wind: #3ddc84; --temp: #ffa033; --rain: #8fb0ff; --night: #2f78c8; --hol: #ff8fd6;
+    --warn: #e59a62; --warn-soft: #3a2a1d; --school: #9db4f0; --weekend: #6e5a10; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1a22; --surface: #162630; --fg: #e5eef3; --muted: #92a6b3;
+  --line: #28404d; --accent: #62bcdb; --accent-soft: #1b3a47;
+  --wind: #3ddc84; --temp: #ffa033; --rain: #8fb0ff; --night: #2f78c8; --hol: #ff8fd6;
+  --warn: #e59a62; --warn-soft: #3a2a1d; --school: #9db4f0; --weekend: #6e5a10; color-scheme: dark;
+}
+
+body { margin:0; background:var(--bg); color:var(--fg); font-family:var(--font-body); font-size:13.5px; }
+.wrap { margin:0 auto; padding:16px; }
+/* only shown when the forecast cannot be loaded */
+.status { font:400 11px var(--font-data); color:var(--warn); margin:0 0 10px; }
+.status:empty { display:none; }
+/* two rows, each scaled to the page width: first half of the week on top, second half below */
+.chart { background:var(--surface); border:1px solid var(--line); border-radius:8px; overflow:hidden; margin-bottom:12px; }
+.chart svg { display:block; width:100%; height:auto; }
+</style></head><body>
+<main class="wrap">
+<p class="status" id="status"></p>
+<div class="chart"><svg id="wxrow0" role="img" aria-label="Hourly forecast chart, first half of the week"></svg></div>
+<div class="chart"><svg id="wxrow1" role="img" aria-label="Hourly forecast chart, second half of the week"></svg></div>
+</main>
+<script>
+// Location and display settings. Forecast comes from Open-Meteo (free, no API key).
+var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
+var DAYS = 7;                    // number of days to chart, starting today
+var STEP = 18;                   // px per hour
+var STRONG = 25;                 // km/h: the wind/gust band is drawn darker above this level
+var ARROW2 = 30, ARROW3 = 45;    // km/h gust: wind arrows get a double head from ARROW2 and a triple head from ARROW3
+var REFRESH_MIN = 30;            // re-fetch interval while the page is open
+var RAIN_STYLE = 'gradient';     // rain fill: 'gradient' (blue fade), 'bars' (one bar per hour), 'drops' (grey with streaks)
+var ICON_SET = 'meteocons';      // 'meteocons' (drawn icons loaded from jsDelivr) or 'emoji'
+var ICON_BASE = 'https://cdn.jsdelivr.net/gh/basmilius/weather-icons@dev/production/fill/svg-static/';
+
+// One continuous chart. d: {WIND, GUST (km/h), RAIN (%), TEMP (C), DIR (bearing wind comes FROM), ICON} per hour from 00:00 on day 0,
+// SUN: [[sunrise, sunset], ...] per day in decimal hours, DAYS: [{label, short, we}] per day, NOW: hours since 00:00 on day 0.
+function drawWeek(d) {
+  var WIND = d.WIND, GUST = d.GUST, RAIN = d.RAIN, TEMP = d.TEMP, DIR = d.DIR, ICON = d.ICON;
+  var n = WIND.length, step = STEP, W = n * step, H = 330, T = 38, B = 18, ih = H - T - B;
+  var maxG = Math.max.apply(null, GUST);
+  var WMAX = Math.max(30, Math.ceil(maxG / 30) * 30);              // 3 gridline intervals
+  var RMAX = Math.min(100, Math.max(30, Math.ceil(Math.max.apply(null, RAIN) / 30) * 30));
+  var TMIN = Math.floor(Math.min.apply(null, TEMP) / 5) * 5 - 0;
+  var TSTEP = Math.max(5, Math.ceil((Math.max.apply(null, TEMP) - TMIN) / 3 / 5) * 5);
+  var TMAX = TMIN + TSTEP * 3;
+  var GOLD = '#e0a800', GREY = '#7d8993';
+  var RC = RAIN_STYLE === 'drops' ? GREY : 'var(--rain)';   // rain colour
+  var mono = 'font-family="DM Mono, monospace"';
+  function x(i) { return (i + 0.5) * step; }
+  function yW(v) { return T + ih - (v / WMAX) * ih; }
+  function yR(v) { return T + ih - (v / RMAX) * ih; }
+  function yT(v) { return T + ih - ((v - TMIN) / (TMAX - TMIN)) * ih; }
+  function clampY(y) { return Math.min(T + ih, Math.max(T, y)); }
+  function curve(pts, cont) {
+    var d = (cont ? ' L' : 'M') + pts[0][0] + ',' + pts[0][1];
+    for (var i = 0; i < pts.length - 1; i++) {
+      var p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+      var c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = clampY(p1[1] + (p2[1] - p0[1]) / 6);
+      var c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = clampY(p2[1] - (p3[1] - p1[1]) / 6);
+      d += ' C' + c1x + ',' + c1y + ' ' + c2x + ',' + c2y + ' ' + p2[0] + ',' + p2[1];
+    }
+    return d;
+  }
+  var out = '', axL = '', axR = '';
+  function xt(t) { return Math.min(W, Math.max(0, x(0) + t * step)); }   // t = hours since 00:00 on day 0
+  var nTop = 2, nH = T + ih - nTop;
+  // night shading melts in and out around sunrise and sunset (soft gradient, no hard edge)
+  var MELT = 0.7;   // hours of fade each side of the boundary
+  function nightRect(id, xa, xb, op0, op1) {
+    out += '<defs><linearGradient id="' + id + '" gradientUnits="userSpaceOnUse" x1="' + xa + '" x2="' + xb + '" y1="0" y2="0"><stop offset="0" stop-color="var(--night)" stop-opacity="' + op0 + '"/><stop offset="1" stop-color="var(--night)" stop-opacity="' + op1 + '"/></linearGradient></defs>';
+    out += '<rect x="' + xa + '" y="' + nTop + '" width="' + (xb - xa) + '" height="' + nH + '" fill="url(#' + id + ')"/>';
+  }
+  function solidNight(xa, xb) {
+    out += '<rect x="' + xa + '" y="' + nTop + '" width="' + Math.max(0, xb - xa) + '" height="' + nH + '" fill="var(--night)" fill-opacity="0.12"/>';
+  }
+  d.SUN.forEach(function (s, k) {
+    var rise = k * 24 + s[0], set = k * 24 + s[1];
+    var prevSet = k ? (k - 1) * 24 + d.SUN[k - 1][1] : null;
+    solidNight(k ? xt(prevSet + MELT) : 0, xt(rise - MELT));
+    nightRect('wxnr' + k, xt(rise - MELT), xt(rise + MELT), 0.12, 0);
+    nightRect('wxns' + k, xt(set - MELT), xt(set + MELT), 0, 0.12);
+    if (k === d.SUN.length - 1) solidNight(xt(set + MELT), W);
+  });
+  // sunny spells (wherever the sky icon is the clear sun) get a yellow shade that melts in and out like the night
+  (function () {
+    var H0 = Math.floor(d.NOW), start = -1;
+    function sunny(i) { return i >= H0 && i < n && ICON[i - (i - H0) % 2][1] === 'clear-day'; }   // the icon shown covers 2 hours
+    for (var i = H0; i <= n; i++) {
+      if (sunny(i)) { if (start < 0) start = i; continue; }
+      if (start < 0) continue;
+      var xa = (start - MELT) * step, xb = (i + MELT) * step, f = 2 * MELT * step / (xb - xa);
+      out += '<defs><linearGradient id="wxsun' + start + '" gradientUnits="userSpaceOnUse" x1="' + xa + '" x2="' + xb + '" y1="0" y2="0"><stop offset="0" stop-color="var(--sun)" stop-opacity="0"/><stop offset="' + f + '" stop-color="var(--sun)" stop-opacity="0.2"/><stop offset="' + (1 - f) + '" stop-color="var(--sun)" stop-opacity="0.2"/><stop offset="1" stop-color="var(--sun)" stop-opacity="0"/></linearGradient></defs>';
+      out += '<rect x="' + xa + '" y="' + nTop + '" width="' + (xb - xa) + '" height="' + nH + '" fill="url(#wxsun' + start + ')"/>';
+      start = -1;
+    }
+  })();
+  var TAGW = 164, TAGR = Math.floor(d.NOW) * step + 4 + TAGW;   // width and right edge of the now tag in the top-left corner
+  // moon phase, drawn in the sky in the middle of each night
+  function drawMoons() {
+    var r = 10, cy = T + 17;
+    for (var k = -1; k < d.SUN.length; k++) {
+      var a = k < 0 ? -0.5 : k * 24 + d.SUN[k][1], b = k + 1 < d.SUN.length ? (k + 1) * 24 + d.SUN[k + 1][0] : n - 0.5;
+      a = Math.max(a, Math.floor(d.NOW) - 0.5);                      // only the part of the night still on the chart
+      if (b - a < 3) continue;
+      var t = (a + b) / 2, m = moon(d.T0 + t * 3600000), cx = Math.max(xt(t), TAGR + 60);   // kept clear of the now tag
+      var p = m.phase < 0.5 ? m.phase : 1 - m.phase;                 // mirrored for the waning half
+      var rx = Math.abs(Math.cos(2 * Math.PI * p)) * r;
+      out += '<g transform="translate(' + cx + ',' + cy + ')' + (m.phase < 0.5 ? '' : ' scale(-1,1)') + '">' +
+        '<circle r="' + r + '" fill="#2b3a55" stroke="#8a97ad" stroke-width="0.6"/>' +
+        '<path d="M0,' + (-r) + ' A' + r + ',' + r + ' 0 0 1 0,' + r + ' A' + rx + ',' + r + ' 0 0 ' + (p < 0.25 ? 0 : 1) + ' 0,' + (-r) + ' Z" fill="#f6e7a6"/></g>';
+      out += '<text x="' + cx + '" y="' + (cy + r + 10) + '" text-anchor="middle" font-size="8" fill="var(--muted)" ' + mono + '>' + m.name + ' ' + Math.round(m.lit * 100) + '%</text>';
+    }
+  }
+  // day's max over min temperature as a fraction, at moon height in the middle of each daytime
+  function drawDayTemps() {
+    var cy = T + 17;
+    d.SUN.forEach(function (s, k) {
+      var a = Math.max(k * 24 + s[0], Math.floor(d.NOW) - 0.5), b = k * 24 + s[1];   // daylight still on the chart
+      if (b - a < 2) return;
+      var t = TEMP.slice(k * 24, k * 24 + 24), cx = Math.max(xt((a + b) / 2), TAGR + 18);   // kept clear of the now tag
+      var att = 'text-anchor="middle" font-size="11" font-weight="700" fill="' + GOLD + '" ' + mono;
+      out += '<text x="' + cx + '" y="' + (cy - 3.5) + '" ' + att + '>' + Math.max.apply(null, t) + '°</text>';
+      out += '<line x1="' + (cx - 11) + '" x2="' + (cx + 11) + '" y1="' + cy + '" y2="' + cy + '" stroke="' + GOLD + '" stroke-width="1.2" stroke-linecap="round"/>';
+      out += '<text x="' + cx + '" y="' + (cy + 11.5) + '" ' + att + '>' + Math.min.apply(null, t) + '°</text>';
+    });
+  }
+  // day dividers at midnight
+  for (var k = 1; k < d.SUN.length; k++) {
+    out += '<line x1="' + (k * 24 * step) + '" x2="' + (k * 24 * step) + '" y1="0" y2="' + H + '" stroke="var(--line)" stroke-width="1"/>';
+  }
+  for (var g = 0; g <= 3; g++) {
+    var gy = T + ih - (g / 3) * ih;
+    out += '<line x1="0" x2="' + W + '" y1="' + gy + '" y2="' + gy + '" stroke="var(--line)" stroke-width="1"/>';
+    axL += '<text x="21" y="' + (gy + 3) + '" text-anchor="end" font-size="9" fill="var(--wind)" ' + mono + '>' + Math.round(g / 3 * WMAX) + '</text>';
+    axR += '<text x="4" y="' + (gy + 3) + '" text-anchor="start" font-size="9" fill="' + GOLD + '" ' + mono + '>' + (TMIN + g * TSTEP) + '°</text>';
+    axR += '<text x="28" y="' + (gy + 3) + '" text-anchor="start" font-size="9" fill="' + RC + '" ' + mono + '>' + Math.round(g / 3 * RMAX) + '%</text>';
+  }
+  var wp = WIND.map(function (v, i) { return [x(i), yW(v)]; });
+  var gp = GUST.map(function (v, i) { return [x(i), yW(v)]; });
+  var rp = RAIN.map(function (v, i) { return [x(i), yR(v < 5 ? 0 : v)]; });   // no fill below 5%
+  var tp = TEMP.map(function (v, i) { return [x(i), yT(v)]; });
+  // light green band between the wind curve and the gust curve
+  out += '<path d="' + curve(gp) + curve(wp.slice().reverse(), true) + ' Z" fill="var(--wind)" fill-opacity="0.13" stroke="none"/>';
+  // darker where the band rises above the STRONG level
+  var yS = yW(STRONG);
+  var gy1 = yW(STRONG), gy2 = yW(100);   // 100 km/h sits far above the plot, so the band only reaches the first part of the ramp
+  // ramp: [km/h above STRONG, colour, opacity]; fast early darkening so 5 km/h over STRONG is already visible
+  var RAMP = [[0, 'var(--wind)', 0], [5, '#0f9a40', 0.55], [15, '#0b7a33', 0.8], [35, '#06501f', 0.92], [100 - STRONG, '#010a04', 0.98]];
+  var stops = RAMP.map(function (r) { return '<stop offset="' + (r[0] / (100 - STRONG)) + '" style="stop-color:' + r[1] + '" stop-opacity="' + r[2] + '"/>'; }).join('');
+  out += '<defs><linearGradient id="wxg" gradientUnits="userSpaceOnUse" x1="0" y1="' + gy1 + '" x2="0" y2="' + gy2 + '">' + stops + '</linearGradient></defs>';
+  out += '<clipPath id="wxstrong"><rect x="0" y="' + T + '" width="' + W + '" height="' + Math.max(0, yS - T) + '"/></clipPath>';
+  out += '<path clip-path="url(#wxstrong)" d="' + curve(gp) + curve(wp.slice().reverse(), true) + ' Z" fill="url(#wxg)" stroke="none"/>';
+  out += '<line x1="0" x2="' + W + '" y1="' + yS + '" y2="' + yS + '" stroke="var(--wind)" stroke-width="0.9" stroke-dasharray="1 3" stroke-opacity="0.8"/>';
+  axL += '<text x="21" y="' + (yS + 3) + '" text-anchor="end" font-size="8" fill="var(--wind)" ' + mono + '>' + STRONG + '</text>';
+  // rain chance filled from the 0 axis so any rain is obvious
+  var rainArea = curve(rp) + ' L' + x(n - 1) + ',' + (T + ih) + ' L' + x(0) + ',' + (T + ih) + ' Z';
+  if (RAIN_STYLE === 'drops') {
+    out += '<path d="' + rainArea + '" fill="' + GREY + '" fill-opacity="0.45" stroke="none"/>';
+    // raindrop texture over the grey rain fill: small slanted streaks
+    out += '<defs><pattern id="wxrain" width="7" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(12)"><line x1="2" y1="1" x2="2" y2="5" stroke="#4a5560" stroke-width="1.2" stroke-linecap="round" stroke-opacity="0.75"/><circle cx="5.5" cy="7.5" r="0.9" fill="#4a5560" fill-opacity="0.6"/></pattern></defs>';
+    out += '<path d="' + rainArea + '" fill="url(#wxrain)" stroke="none"/>';
+  } else if (RAIN_STYLE === 'bars') {
+    // one rounded bar per hour, more opaque the likelier the rain
+    RAIN.forEach(function (v, i) {
+      if (v < 5) return;
+      out += '<rect x="' + (x(i) - step * 0.36) + '" y="' + yR(v) + '" width="' + (step * 0.72) + '" height="' + (T + ih - yR(v)) + '" rx="2.5" fill="var(--rain)" fill-opacity="' + (0.25 + 0.5 * v / 100) + '"/>';
+    });
+  } else {
+    // blue fill that deepens towards 100%
+    out += '<defs><linearGradient id="wxrain" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="' + yR(100) + '" y2="' + (T + ih) + '"><stop offset="0" stop-color="var(--rain)" stop-opacity="0.7"/><stop offset="1" stop-color="var(--rain)" stop-opacity="0.08"/></linearGradient></defs>';
+    out += '<path d="' + rainArea + '" fill="url(#wxrain)" stroke="none"/>';
+  }
+  drawMoons();
+  drawDayTemps();
+  out += '<path d="' + curve(gp) + '" fill="none" stroke="var(--wind)" stroke-width="1.6" stroke-dasharray="4 3" stroke-linecap="round"/>';
+  out += '<path d="' + curve(wp) + '" fill="none" stroke="var(--wind)" stroke-width="2.6" stroke-linecap="round"/>';
+  // rain line follows the edge of the fill right down to the axis; the clip hides the flat stretches lying on the axis
+  if (RAIN_STYLE !== 'bars') {
+    out += '<clipPath id="wxrainline"><rect x="0" y="' + (T - 2) + '" width="' + W + '" height="' + (ih + 2 - 1.2) + '"/></clipPath>';
+    out += '<path clip-path="url(#wxrainline)" d="' + curve(rp) + '" fill="none" stroke="' + RC + '" stroke-width="2.2" stroke-linejoin="round"/>';
+  }
+  out += '<path d="' + curve(tp) + '" fill="none" stroke="' + GOLD + '" stroke-width="2.8" stroke-linecap="round"/>';
+  // wind-direction arrows riding just above the gust curve
+  GUST.forEach(function (gv, i) {
+    var ay = Math.max(T + 8, yW(gv) - 11), rot = DIR[i] + 180;
+    var heads = gv >= ARROW3 ? 3 : gv >= ARROW2 ? 2 : 1, head = [' M-3,-1.5 L0,-5.5 L3,-1.5', ' M-3,1.7 L0,-2.3 L3,1.7', ' M-3,4.9 L0,0.9 L3,4.9'];
+    out += '<g transform="translate(' + x(i) + ',' + ay + ') rotate(' + rot + ')" stroke="#06501f" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M0,' + (heads > 2 ? 6.5 : 5) + ' L0,-5' + head.slice(0, heads).join('') + '"/></g>';
+  });
+  // per-day labels: peak gust, max and min temperature
+  function put(i, y, txt, col, below) {
+    var ty = below ? y + 12 : y - 5;
+    ty = Math.min(T + ih - 2, Math.max(T + 9, ty));
+    out += '<text x="' + x(i) + '" y="' + ty + '" text-anchor="middle" font-size="9" font-weight="500" fill="' + col + '" ' + mono + '>' + txt + '</text>';
+  }
+  function fmt(t) { var h = Math.floor(t), m = Math.round((t - h) * 60); if (m === 60) { h++; m = 0; } return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m; }
+  d.SUN.forEach(function (s, k) {
+    var a = k * 24, g = GUST.slice(a, a + 24), t = TEMP.slice(a, a + 24);
+    var mg = Math.max.apply(null, g), mt = Math.max.apply(null, t), nt = Math.min.apply(null, t);
+    out += '<text x="' + x(a + g.indexOf(mg)) + '" y="' + Math.max(T + 9, yW(mg) - 20) + '" text-anchor="middle" font-size="9" font-weight="500" fill="var(--wind)" ' + mono + '>' + mg + '</text>';
+    put(a + t.indexOf(mt), yT(mt), mt + '°', GOLD, false);
+    put(a + t.indexOf(nt), yT(nt), nt + '°', GOLD, true);
+    // sunrise / sunset times, centred on the day/night boundary just below the sky icons
+    s.forEach(function (v) {
+      out += '<text x="' + xt(a + v) + '" y="36" text-anchor="middle" font-size="8.5" font-weight="500" fill="var(--fg)" ' + mono + '>' + fmt(v) + '</text>';
+    });
+  });
+  for (var i = 0; i < n; i++) {
+    var h = i % 24;
+    // one sky icon per 2 hours (counted from the current hour), centred over the pair
+    var H0 = Math.floor(d.NOW), ix = x(i) + step / 2;
+    if (i >= H0 && (i - H0) % 2 === 0) out += ICON_SET === 'emoji'
+      ? '<text x="' + ix + '" y="26" text-anchor="middle" font-size="24">' + ICON[i][0] + '</text>'
+      : '<image href="' + ICON_BASE + ICON[i][1] + '.svg" x="' + (ix - 19) + '" y="-5" width="38" height="38"/>';
+    out += '<text x="' + x(i) + '" y="' + (H - 5) + '" text-anchor="middle" font-size="8" fill="var(--muted)" ' + mono + '>' + (h < 10 ? '0' + h : h) + '</text>';
+  }
+  // current-time marker with a small tag of the conditions right now (interpolated between the hourly values)
+  var nx = x(0) + d.NOW * step;
+  out += '<line x1="' + nx + '" x2="' + nx + '" y1="' + T + '" y2="' + (T + ih) + '" stroke="var(--fg)" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="3 3"/>';
+  function at(arr) { var i = Math.floor(d.NOW), f = d.NOW - i, b = arr[Math.min(n - 1, i + 1)]; return Math.round(arr[i] + (b - arr[i]) * f); }
+  var tx = Math.floor(d.NOW) * step + 4, ty = T + 4, rows = [   // top-left corner of the plot
+    ['var(--fg)', 'Now ' + fmt(d.NOW)],
+    ['var(--wind)', 'Wind ' + at(WIND) + ' · gust ' + at(GUST)],
+    [GOLD, 'Temp ' + at(TEMP) + '°'],
+    [RC, 'Rain ' + at(RAIN) + '%']
+  ];
+  out += '<rect x="' + tx + '" y="' + ty + '" width="' + TAGW + '" height="' + (rows.length * 17 + 9) + '" rx="5" fill="var(--surface)" fill-opacity="0.3" stroke="var(--line)" stroke-opacity="0.7"/>';
+  rows.forEach(function (r, i) {
+    out += '<text x="' + (tx + 7) + '" y="' + (ty + 18 + i * 17) + '" font-size="14" font-weight="' + (i ? 500 : 700) + '" fill="' + r[0] + '" stroke="var(--surface)" stroke-width="2.5" stroke-opacity="0.6" paint-order="stroke" ' + mono + '>' + r[1] + '</text>';
+  });
+  // The chart starts at the current hour (everything earlier is cropped off) and is cut into two equal rows.
+  // Each row is a window onto the same drawing, with its own day banner on top and the fixed axes either side.
+  var X0 = Math.floor(d.NOW) * step, AL = 26, AR = 52, BH = 24;
+  var rowW = Math.ceil((n - Math.floor(d.NOW)) / 4) * 2 * step, dayW = 24 * step;   // even number of hours so the 2-hour icons never straddle the cut
+  [0, 1].forEach(function (r) {
+    var xa = X0 + r * rowW, xb = xa + rowW, ban = '';
+    d.DAYS.forEach(function (day, k) {
+      var ds = Math.max(k * dayW, xa), de = Math.min((k + 1) * dayW, xb), w = de - ds;
+      if (w <= 0) return;
+      if (day.we) ban += '<rect x="' + ds + '" y="0" width="' + w + '" height="' + BH + '" fill="var(--weekend)"/>';   // weekend banner in yellow
+      if (ds === k * dayW && ds > xa) ban += '<line x1="' + ds + '" x2="' + ds + '" y1="0" y2="' + BH + '" stroke="var(--line)"/>';
+      // full day name where it fits, otherwise a short one
+      var full = (k ? '' : 'Today · ') + day.label, txt = w >= full.length * 7.6 + 14 ? full : w >= 58 ? (k ? day.short : 'Today') : '';
+      ban += '<text x="' + (ds + 8) + '" y="17" style="font:700 13px var(--font-display)" fill="var(--fg)">' + txt + '</text>';
+    });
+    var svg = document.getElementById('wxrow' + r);
+    svg.setAttribute('viewBox', '0 0 ' + (AL + rowW + AR) + ' ' + (BH + H));
+    svg.innerHTML =
+      '<svg x="' + AL + '" y="0" width="' + rowW + '" height="' + BH + '" viewBox="' + xa + ' 0 ' + rowW + ' ' + BH + '">' + ban + '</svg>' +
+      '<line x1="' + AL + '" x2="' + (AL + rowW) + '" y1="' + BH + '" y2="' + BH + '" stroke="var(--line)"/>' +
+      '<svg x="' + AL + '" y="' + BH + '" width="' + rowW + '" height="' + H + '" viewBox="' + xa + ' 0 ' + rowW + ' ' + H + '">' + out + '</svg>' +
+      '<g transform="translate(0,' + BH + ')">' + axL + '</g><g transform="translate(' + (AL + rowW) + ',' + BH + ')">' + axR + '</g>';
+  });
+}
+
+// WMO weather code -> [emoji, Meteocons icon name]
+function icon(code, isDay) {
+  var dn = isDay ? 'day' : 'night';
+  if (code === 0) return [isDay ? '☀️' : '🌙', 'clear-' + dn];
+  if (code === 1) return [isDay ? '🌤️' : '🌙', 'partly-cloudy-' + dn];
+  if (code === 2) return [isDay ? '⛅' : '☁️', 'overcast-' + dn];
+  if (code === 3) return ['☁️', 'overcast'];
+  if (code === 45 || code === 48) return ['🌫️', 'fog'];
+  if (code >= 51 && code <= 57) return ['🌦️', 'drizzle'];
+  if (code === 66 || code === 67) return ['🌧️', 'sleet'];
+  if (code >= 61 && code <= 65) return ['🌧️', 'rain'];
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return ['🌨️', 'snow'];
+  if (code === 80) return ['🌦️', 'partly-cloudy-' + dn + '-rain'];
+  if (code === 81 || code === 82) return ['🌧️', 'rain'];
+  if (code >= 95) return ['⛈️', 'thunderstorms-rain'];
+  return ['☁️', 'overcast'];
+}
+// Moon phase at a given time (ms): phase 0 = new, 0.5 = full; lit = illuminated fraction
+function moon(ms) {
+  var SYNODIC = 29.530588853, NEW0 = Date.UTC(2000, 0, 6, 18, 14);   // a reference new moon
+  var ph = ((ms - NEW0) / 86400000 / SYNODIC) % 1;
+  if (ph < 0) ph += 1;
+  var names = ['New', 'Waxing crescent', 'First quarter', 'Waxing gibbous', 'Full', 'Waning gibbous', 'Last quarter', 'Waning crescent'];
+  return { phase: ph, lit: (1 - Math.cos(2 * Math.PI * ph)) / 2, name: names[Math.round(ph * 8) % 8] };
+}
+function decHour(iso) { return +iso.slice(11, 13) + (+iso.slice(14, 16)) / 60; }
+function num(v) { return v == null ? 0 : Math.round(v); }
+
+var lastLoad = 0;
+function render(j) {
+  var h = j.hourly, nDays = j.daily.time.length, n = nDays * 24;
+  var d = { WIND: [], GUST: [], RAIN: [], TEMP: [], DIR: [], ICON: [], SUN: [] };
+  for (var i = 0; i < n; i++) {
+    d.WIND.push(num(h.wind_speed_10m[i]));
+    d.GUST.push(Math.max(num(h.wind_gusts_10m[i]), num(h.wind_speed_10m[i])));
+    d.RAIN.push(num(h.precipitation_probability[i]));
+    d.TEMP.push(num(h.temperature_2m[i]));
+    d.DIR.push(h.wind_direction_10m[i] || 0);
+    d.ICON.push(icon(h.weather_code[i], h.is_day[i]));
+  }
+  // "now" in the forecast location's own timezone
+  var loc = new Date(Date.now() + j.utc_offset_seconds * 1000);
+  d.NOW = loc.getUTCHours() + loc.getUTCMinutes() / 60;
+  d.T0 = Date.parse(j.daily.time[0] + 'T00:00:00Z') - j.utc_offset_seconds * 1000;   // 00:00 local on day 0
+  d.DAYS = [];
+  j.daily.time.forEach(function (date, k) {
+    d.SUN.push([decHour(j.daily.sunrise[k]), decHour(j.daily.sunset[k])]);
+    var dt = new Date(date + 'T12:00:00Z'), dow = dt.getUTCDay();
+    d.DAYS.push({
+      label: dt.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', timeZone: 'UTC' }),
+      short: dt.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', timeZone: 'UTC' }),
+      we: dow === 0 || dow === 6
+    });
+  });
+  drawWeek(d);
+  document.getElementById('status').textContent = '';
+}
+function load() {
+  var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + LAT + '&longitude=' + LON +
+    '&hourly=temperature_2m,precipitation_probability,weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m,is_day' +
+    '&daily=sunrise,sunset&wind_speed_unit=kmh&timezone=' + encodeURIComponent(TZ) + '&forecast_days=' + DAYS;
+  fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function (j) { lastLoad = Date.now(); render(j); })
+    .catch(function (e) {
+      document.getElementById('status').textContent = 'Could not load forecast (' + e.message + '). Retrying in ' + REFRESH_MIN + ' min.';
+    });
+}
+load();
+setInterval(load, REFRESH_MIN * 60000);
+// refresh when the tab is reopened after a while
+document.addEventListener('visibilitychange', function () {
+  if (!document.hidden && Date.now() - lastLoad > REFRESH_MIN * 60000) load();
+});
+</script>
+</body></html>
