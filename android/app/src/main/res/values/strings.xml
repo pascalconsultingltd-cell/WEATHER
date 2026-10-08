@@ -3,4 +3,5 @@
     <string name="app_name">Weather</string>
     <string name="widget_wind">Wind now</string>
     <string name="widget_temp">Weather now</string>
+    <string name="widget_lido">Lido temperature</string>
 </resources>

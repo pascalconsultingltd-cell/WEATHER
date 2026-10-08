@@ -45,5 +45,18 @@
                 android:name="android.appwidget.provider"
                 android:resource="@xml/temp_widget_info" />
         </receiver>
+
+        <!-- 1x1 home-screen widget: Lido water temperature -->
+        <receiver
+            android:name=".LidoWidget"
+            android:exported="true"
+            android:label="@string/widget_lido">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/lido_widget_info" />
+        </receiver>
     </application>
 </manifest>

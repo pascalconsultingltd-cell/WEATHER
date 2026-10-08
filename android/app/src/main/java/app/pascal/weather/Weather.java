@@ -21,6 +21,9 @@ import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 
 /**
  * Shared by the home-screen widgets: fetches the conditions right now, remembers them and draws the widget faces.
@@ -33,6 +36,8 @@ final class Weather {
     static final String API = "https://api.open-meteo.com/v1/forecast?latitude=" + LAT + "&longitude=" + LON
             + "&current=temperature_2m,weather_code,is_day,wind_speed_10m,wind_gusts_10m,wind_direction_10m"
             + "&daily=temperature_2m_max,temperature_2m_min&forecast_days=1&wind_speed_unit=kmh&timezone=" + TZ;
+    // latest Hampstead Heath Lido water temperature, saved to the repo by a scheduled job (published about weekly)
+    static final String LIDO_URL = "https://raw.githubusercontent.com/pascalconsultingltd-cell/WEATHER/main/lido.json";
     static final String PREFS = "weather";
 
     // widget faces are drawn on a 100x100 grid scaled up to SIZE pixels
@@ -62,9 +67,22 @@ final class Weather {
                             .putInt("code", cur.optInt("weather_code", 3))
                             .putBoolean("day", cur.optInt("is_day", 1) == 1)
                             .apply();
-                    render(context);
                 } catch (Exception e) {
                     // offline or the service is down: the widgets keep showing the last values
+                }
+                try {
+                    JSONObject lido = new JSONObject(get(LIDO_URL));
+                    if (!lido.isNull("lido")) {
+                        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                                .putInt("lido", lido.getInt("lido"))
+                                .putString("lidoDate", lido.optString("date", ""))
+                                .apply();
+                    }
+                } catch (Exception e) {
+                    // same: keep the last published reading
+                }
+                try {
+                    render(context);
                 } finally {
                     if (pending != null) pending.finish();
                 }
@@ -92,6 +110,7 @@ final class Weather {
         boolean ok = p.getBoolean("ok", false);
         show(context, WindWidget.class, ok ? drawWind(p.getInt("speed", 0), p.getInt("gust", 0), p.getFloat("dir", 0)) : drawEmpty());
         show(context, TempWidget.class, ok ? drawTemp(p.getInt("code", 3), p.getBoolean("day", true), p.getInt("temp", 0), p.getInt("tmax", 0), p.getInt("tmin", 0)) : drawEmpty());
+        show(context, LidoWidget.class, p.contains("lido") ? drawLido(p.getInt("lido", 0), p.getString("lidoDate", "")) : drawEmpty());
     }
 
     private static void show(Context context, Class<?> provider, Bitmap face) {
@@ -191,6 +210,53 @@ final class Weather {
         bar.setStrokeCap(Paint.Cap.ROUND);
         bar.setShadowLayer(2.2f * K, 0, 0.6f * K, SHADOW);
         c.drawLine(fx - wFrac / 2, 77.5f * K, fx + wFrac / 2, 77.5f * K, bar);
+        return bmp;
+    }
+
+    /** Two blue waves with the Lido water temperature across them, and the day it was measured underneath. */
+    static Bitmap drawLido(int temp, String isoDate) {
+        Bitmap bmp = blank();
+        Canvas c = new Canvas(bmp);
+        Paint wave = new Paint(Paint.ANTI_ALIAS_FLAG);
+        wave.setStyle(Paint.Style.STROKE);
+        wave.setStrokeWidth(12 * K);
+        wave.setStrokeCap(Paint.Cap.ROUND);
+        int[] colours = {0xFF4AA8FF, 0xFF6FBCFF};
+        for (int w = 0; w < 2; w++) {
+            float y = (30 + w * 26) * K;
+            Path p = new Path();
+            p.moveTo(6 * K, y);
+            p.quadTo(20 * K, y - 18 * K, 34 * K, y);
+            p.quadTo(48 * K, y + 18 * K, 62 * K, y);
+            p.quadTo(76 * K, y - 18 * K, 90 * K, y);
+            wave.setColor(colours[w]);
+            c.drawPath(p, wave);
+        }
+
+        // the number: white with a dark-blue outline so it reads on top of the waves
+        String s = temp + "°";
+        Paint num = new Paint(Paint.ANTI_ALIAS_FLAG);
+        num.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+        num.setTextSize(36 * K);
+        num.setTextAlign(Paint.Align.CENTER);
+        num.setStyle(Paint.Style.STROKE);
+        num.setStrokeWidth(4 * K);
+        num.setStrokeJoin(Paint.Join.ROUND);
+        num.setColor(0xBF0A3A66);
+        c.drawText(s, 50 * K, 55 * K, num);
+        num.setStyle(Paint.Style.FILL);
+        num.setColor(WHITE);
+        c.drawText(s, 50 * K, 55 * K, num);
+
+        String date = "";
+        try {
+            date = LocalDate.parse(isoDate).format(DateTimeFormatter.ofPattern("d MMM", Locale.UK));
+        } catch (Exception e) {
+            // no date published: show the temperature alone
+        }
+        Paint small = text(16, MUTED, false);
+        small.setTextAlign(Paint.Align.CENTER);
+        c.drawText(date, 50 * K, 90 * K, small);
         return bmp;
     }
 
