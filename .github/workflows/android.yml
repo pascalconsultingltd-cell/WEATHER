@@ -1,0 +1,39 @@
+name: Android app
+
+# Builds the Android app (chart + wind widget) and publishes the installable APK as the latest release.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Build APK
+        working-directory: android
+        run: gradle --no-daemon assembleDebug
+      - name: Rename APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk weather.apk
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: android-${{ github.run_number }}
+          name: Weather app build ${{ github.run_number }}
+          body: Install weather.apk on your Android phone. It updates over any earlier build.
+          files: weather.apk
+          make_latest: true

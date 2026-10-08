@@ -1,0 +1,38 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Each CI build gets a higher version code so a new APK installs over the previous one.
+def buildNumber = (System.getenv('GITHUB_RUN_NUMBER') ?: '1') as int
+
+android {
+    namespace 'app.pascal.weather'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'app.pascal.weather'
+        minSdk 26
+        targetSdk 34
+        versionCode buildNumber
+        versionName "1.${buildNumber}"
+    }
+
+    // One fixed key kept in the repo, so every build is signed the same way and updates install without uninstalling first.
+    signingConfigs {
+        shared {
+            storeFile file('../debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.shared
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
