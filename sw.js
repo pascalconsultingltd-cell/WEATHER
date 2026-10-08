@@ -1,5 +1,5 @@
 // Service worker: keeps the app shell, the sky icons and the last forecast available offline.
-var CACHE = 'weather-v2';
+var CACHE = 'weather-v1';
 var SHELL = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 
 self.addEventListener('install', function (e) {

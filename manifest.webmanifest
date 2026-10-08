@@ -1,5 +1,4 @@
 {
-  "id": "weather-v2",
   "name": "Weather",
   "short_name": "Weather",
   "description": "Hourly wind, rain and temperature for the week ahead",
