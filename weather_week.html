@@ -64,6 +64,8 @@ var ARROW2 = 30, ARROW3 = 45;    // km/h gust: wind arrows get a double head fro
 var REFRESH_MIN = 30;            // re-fetch interval while the page is open
 var RAIN_STYLE = 'gradient';     // rain fill: 'gradient' (blue fade), 'bars' (one bar per hour), 'drops' (grey with streaks)
 var ICON_SET = 'meteocons';      // 'meteocons' (drawn icons loaded from jsDelivr) or 'emoji'
+// Hampstead Heath Lido water temperature, saved to the repo by a scheduled job (the City of London publishes it about weekly)
+var LIDO_URL = 'https://raw.githubusercontent.com/pascalconsultingltd-cell/WEATHER/main/lido.json', LIDO = null;
 var ICON_BASE = 'https://cdn.jsdelivr.net/gh/basmilius/weather-icons@dev/production/fill/svg-static/';
 
 // One continuous chart. d: {WIND, GUST (km/h), RAIN (%), TEMP (C), DIR (bearing wind comes FROM), ICON} per hour from 00:00 on day 0,
@@ -145,17 +147,22 @@ function drawWeek(d) {
       out += '<text x="' + cx + '" y="' + (cy + r + 10) + '" text-anchor="middle" font-size="8" fill="var(--muted)" ' + mono + '>' + m.name + ' ' + Math.round(m.lit * 100) + '%</text>';
     }
   }
-  // day's max over min temperature as a fraction, at moon height in the middle of each daytime
+  // day's max over min temperature as a big fraction in the middle of each daytime:
+  // gold when the daylight hours are mostly sunny, grey when mostly cloudy
   function drawDayTemps() {
-    var cy = T + 17;
+    var cy = T + ih / 2, SUNNY = { 'clear-day': 1, 'partly-cloudy-day': 1, 'overcast-day': 0.5 };   // how sunny each sky icon counts
     d.SUN.forEach(function (s, k) {
       var a = Math.max(k * 24 + s[0], Math.floor(d.NOW) - 0.5), b = k * 24 + s[1];   // daylight still on the chart
       if (b - a < 2) return;
-      var t = TEMP.slice(k * 24, k * 24 + 24), cx = Math.max(xt((a + b) / 2), TAGR + 18);   // kept clear of the now tag
-      var att = 'text-anchor="middle" font-size="11" font-weight="700" fill="' + GOLD + '" ' + mono;
-      out += '<text x="' + cx + '" y="' + (cy - 3.5) + '" ' + att + '>' + Math.max.apply(null, t) + '°</text>';
-      out += '<line x1="' + (cx - 11) + '" x2="' + (cx + 11) + '" y1="' + cy + '" y2="' + cy + '" stroke="' + GOLD + '" stroke-width="1.2" stroke-linecap="round"/>';
-      out += '<text x="' + cx + '" y="' + (cy + 11.5) + '" ' + att + '>' + Math.min.apply(null, t) + '°</text>';
+      var t = TEMP.slice(k * 24, k * 24 + 24), cx = xt((a + b) / 2), score = 0, hrs = 0;
+      for (var i = k * 24 + Math.ceil(s[0]); i <= k * 24 + Math.floor(s[1]); i++) { score += SUNNY[ICON[i][1]] || 0; hrs++; }
+      var col = hrs && score / hrs >= 0.5 ? GOLD : GREY;
+      var halo = 'stroke="var(--surface)" stroke-opacity="0.75" stroke-linejoin="round" stroke-linecap="round"';
+      var att = 'text-anchor="middle" font-size="24" font-weight="700" fill="' + col + '" stroke-width="4" paint-order="stroke" ' + halo + ' ' + mono;
+      out += '<text x="' + cx + '" y="' + (cy - 7) + '" ' + att + '>' + Math.max.apply(null, t) + '°</text>';
+      out += '<line x1="' + (cx - 21) + '" x2="' + (cx + 21) + '" y1="' + cy + '" y2="' + cy + '" stroke-width="6" ' + halo + '/>';
+      out += '<line x1="' + (cx - 21) + '" x2="' + (cx + 21) + '" y1="' + cy + '" y2="' + cy + '" stroke="' + col + '" stroke-width="2.4" stroke-linecap="round"/>';
+      out += '<text x="' + cx + '" y="' + (cy + 25) + '" ' + att + '>' + Math.min.apply(null, t) + '°</text>';
     });
   }
   // day dividers at midnight
@@ -205,7 +212,6 @@ function drawWeek(d) {
     out += '<path d="' + rainArea + '" fill="url(#wxrain)" stroke="none"/>';
   }
   drawMoons();
-  drawDayTemps();
   out += '<path d="' + curve(gp) + '" fill="none" stroke="var(--wind)" stroke-width="1.6" stroke-dasharray="4 3" stroke-linecap="round"/>';
   out += '<path d="' + curve(wp) + '" fill="none" stroke="var(--wind)" stroke-width="2.6" stroke-linecap="round"/>';
   // rain line follows the edge of the fill right down to the axis; the clip hides the flat stretches lying on the axis
@@ -247,6 +253,7 @@ function drawWeek(d) {
       : '<image href="' + ICON_BASE + ICON[i][1] + '.svg" x="' + (ix - 19) + '" y="-5" width="38" height="38"/>';
     out += '<text x="' + x(i) + '" y="' + (H - 5) + '" text-anchor="middle" font-size="8" fill="var(--muted)" ' + mono + '>' + (h < 10 ? '0' + h : h) + '</text>';
   }
+  drawDayTemps();
   // current-time marker with a small tag of the conditions right now (interpolated between the hourly values)
   var nx = x(0) + d.NOW * step;
   out += '<line x1="' + nx + '" x2="' + nx + '" y1="' + T + '" y2="' + (T + ih) + '" stroke="var(--fg)" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="3 3"/>';
@@ -257,6 +264,8 @@ function drawWeek(d) {
     [GOLD, 'Temp ' + at(TEMP) + '°'],
     [RC, 'Rain ' + at(RAIN) + '%']
   ];
+  // latest published Lido water temperature and the day it was measured
+  if (LIDO && LIDO.lido != null) rows.push(['var(--accent)', 'Lido ' + LIDO.lido + '° · ' + new Date(LIDO.date + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })]);
   out += '<rect x="' + tx + '" y="' + ty + '" width="' + TAGW + '" height="' + (rows.length * 17 + 9) + '" rx="5" fill="var(--surface)" fill-opacity="0.3" stroke="var(--line)" stroke-opacity="0.7"/>';
   rows.forEach(function (r, i) {
     out += '<text x="' + (tx + 7) + '" y="' + (ty + 18 + i * 17) + '" font-size="14" font-weight="' + (i ? 500 : 700) + '" fill="' + r[0] + '" stroke="var(--surface)" stroke-width="2.5" stroke-opacity="0.6" paint-order="stroke" ' + mono + '>' + r[1] + '</text>';
@@ -314,7 +323,7 @@ function moon(ms) {
 function decHour(iso) { return +iso.slice(11, 13) + (+iso.slice(14, 16)) / 60; }
 function num(v) { return v == null ? 0 : Math.round(v); }
 
-var lastLoad = 0;
+var lastLoad = 0, lastData = null;
 function render(j) {
   var h = j.hourly, nDays = j.daily.time.length, n = nDays * 24;
   var d = { WIND: [], GUST: [], RAIN: [], TEMP: [], DIR: [], ICON: [], SUN: [] };
@@ -344,11 +353,14 @@ function render(j) {
   document.getElementById('status').textContent = '';
 }
 function load() {
+  fetch(LIDO_URL).then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (v) { if (v) { LIDO = v; if (lastData) render(lastData); } })
+    .catch(function () {});   // the chart works without it
   var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + LAT + '&longitude=' + LON +
     '&hourly=temperature_2m,precipitation_probability,weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m,is_day' +
     '&daily=sunrise,sunset&wind_speed_unit=kmh&timezone=' + encodeURIComponent(TZ) + '&forecast_days=' + DAYS;
   fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-    .then(function (j) { lastLoad = Date.now(); render(j); })
+    .then(function (j) { lastLoad = Date.now(); lastData = j; render(j); })
     .catch(function (e) {
       document.getElementById('status').textContent = 'Could not load forecast (' + e.message + '). Retrying in ' + REFRESH_MIN + ' min.';
     });

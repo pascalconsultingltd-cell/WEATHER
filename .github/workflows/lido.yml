@@ -1,0 +1,28 @@
+name: Lido temperature
+
+# Checks the City of London's Hampstead Heath page three times a day and saves the latest
+# water temperatures to lido.json, which the chart reads. Commits only when the reading changes.
+on:
+  schedule:
+    - cron: '23 6,11,16 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch latest reading
+        run: python3 scripts/lido.py
+      - name: Commit if changed
+        run: |
+          git add lido.json
+          if ! git diff --cached --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "Update Lido water temperature"
+            git push
+          fi

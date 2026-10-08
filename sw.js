@@ -28,5 +28,5 @@ self.addEventListener('fetch', function (e) {
   if (e.request.method !== 'GET') return;
   var host = new URL(e.request.url).hostname;
   if (host === 'cdn.jsdelivr.net') e.respondWith(cacheFirst(e.request));
-  else if (host === location.hostname || host === 'api.open-meteo.com') e.respondWith(networkFirst(e.request));
+  else if (host === location.hostname || host === 'api.open-meteo.com' || host === 'raw.githubusercontent.com') e.respondWith(networkFirst(e.request));
 });
