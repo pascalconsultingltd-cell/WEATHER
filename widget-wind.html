@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wind now</title>
+<style>
+/* Tiny page meant to be shown in a 1x1 home-screen widget: the wind arrow right now, with wind-gust speed underneath. */
+:root { --surface:#ffffff; --fg:#13212b; --muted:#566878; --wind:#14b24c; }
+@media (prefers-color-scheme: dark) { :root { --surface:#162630; --fg:#e5eef3; --muted:#92a6b3; --wind:#3ddc84; color-scheme:dark; } }
+html, body { height:100%; margin:0; overflow:hidden; background:var(--surface); }
+svg { display:block; width:100vw; height:100vh; }
+text { font-family:"DM Mono", ui-monospace, Menlo, Consolas, monospace; }
+</style></head><body>
+<svg id="w" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Wind now"></svg>
+<script>
+// Same location and arrow rules as the main chart.
+var LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
+var ARROW2 = 30, ARROW3 = 45;    // km/h gust: double head from ARROW2, triple head from ARROW3
+var REFRESH_MIN = 15;
+
+function draw(speed, gust, dir) {
+  var heads = gust >= ARROW3 ? 3 : gust >= ARROW2 ? 2 : 1;
+  var head = [' M-12,-8 L0,-24 L12,-8', ' M-12,5 L0,-11 L12,5', ' M-12,18 L0,2 L12,18'];
+  // the arrow points where the wind blows TO (bearing it comes from + 180)
+  document.getElementById('w').innerHTML =
+    '<g transform="translate(50,36) rotate(' + (dir + 180) + ')" stroke="var(--wind)" stroke-width="6.5" stroke-linecap="round" stroke-linejoin="round" fill="none">' +
+    '<path d="M0,24 L0,-22' + head.slice(0, heads).join('') + '"/></g>' +
+    '<text x="50" y="93" text-anchor="middle" font-size="25" font-weight="700" fill="var(--fg)">' + speed +
+    '<tspan font-size="17" font-weight="500" fill="var(--muted)">-' + gust + '</tspan></text>';
+}
+function load() {
+  var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + LAT + '&longitude=' + LON +
+    '&current=wind_speed_10m,wind_gusts_10m,wind_direction_10m&wind_speed_unit=kmh&timezone=' + encodeURIComponent(TZ);
+  fetch(url, { cache: 'no-store' }).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then(function (j) {
+      var c = j.current, s = Math.round(c.wind_speed_10m);
+      draw(s, Math.max(s, Math.round(c.wind_gusts_10m)), c.wind_direction_10m || 0);
+    })
+    .catch(function () {
+      document.getElementById('w').innerHTML = '<text x="50" y="58" text-anchor="middle" font-size="22" fill="var(--muted)">no data</text>';
+    });
+}
+load();
+setInterval(load, REFRESH_MIN * 60000);
+</script>
+</body></html>
