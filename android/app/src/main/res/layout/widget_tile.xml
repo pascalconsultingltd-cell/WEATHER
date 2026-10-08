@@ -1,16 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Shared by every widget: a transparent tile holding one bitmap drawn by Weather -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@drawable/widget_bg"
-    android:padding="4dp">
+    android:layout_height="match_parent">
 
-    <!-- Arrow and speeds are drawn into one bitmap by WindWidget -->
     <ImageView
         android:id="@+id/img"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:contentDescription="@string/widget_wind"
+        android:contentDescription="@string/app_name"
         android:scaleType="fitCenter" />
 </FrameLayout>

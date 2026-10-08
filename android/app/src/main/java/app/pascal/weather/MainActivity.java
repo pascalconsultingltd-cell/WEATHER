@@ -20,7 +20,7 @@ public class MainActivity extends Activity {
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         web.setWebViewClient(new WebViewClient());   // keep navigation inside the app
-        web.setBackgroundColor(0xFF162630);
+        web.setBackgroundColor(0xFFFFFFFF);
         setContentView(web);
         web.loadUrl(CHART_URL);
     }
@@ -28,7 +28,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        // opening the app also brings the widget up to date
-        WindWidget.refresh(getApplicationContext(), null);
+        // opening the app also brings the widgets up to date
+        Weather.refresh(getApplicationContext(), null);
     }
 }
