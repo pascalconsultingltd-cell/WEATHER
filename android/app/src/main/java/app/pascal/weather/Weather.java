@@ -76,6 +76,8 @@ final class Weather {
                         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                                 .putInt("lido", lido.getInt("lido"))
                                 .putString("lidoDate", lido.optString("date", ""))
+                                // today's estimate; absent when the reading itself is from today
+                                .putFloat("lidoEst", lido.optString("date", "").equals(lido.optString("estimate_date", "")) ? Float.NaN : (float) lido.optDouble("estimate", Double.NaN))
                                 .apply();
                     }
                 } catch (Exception e) {
@@ -110,7 +112,7 @@ final class Weather {
         boolean ok = p.getBoolean("ok", false);
         show(context, WindWidget.class, ok ? drawWind(p.getInt("speed", 0), p.getInt("gust", 0), p.getFloat("dir", 0)) : drawEmpty());
         show(context, TempWidget.class, ok ? drawTemp(p.getInt("code", 3), p.getBoolean("day", true), p.getInt("temp", 0), p.getInt("tmax", 0), p.getInt("tmin", 0)) : drawEmpty());
-        show(context, LidoWidget.class, p.contains("lido") ? drawLido(p.getInt("lido", 0), p.getString("lidoDate", "")) : drawEmpty());
+        show(context, LidoWidget.class, p.contains("lido") ? drawLido(p.getInt("lido", 0), p.getString("lidoDate", ""), p.getFloat("lidoEst", Float.NaN)) : drawEmpty());
     }
 
     private static void show(Context context, Class<?> provider, Bitmap face) {
@@ -213,8 +215,11 @@ final class Weather {
         return bmp;
     }
 
-    /** Two blue waves with the Lido water temperature across them, and the day it was measured underneath. */
-    static Bitmap drawLido(int temp, String isoDate) {
+    /**
+     * Two blue waves with the Lido water temperature across them. The Lido is published about weekly, so the big figure is
+     * today's estimate ("~16°") with the last real reading and its date underneath; without an estimate, the reading itself.
+     */
+    static Bitmap drawLido(int temp, String isoDate, float estimate) {
         Bitmap bmp = blank();
         Canvas c = new Canvas(bmp);
         Paint wave = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -234,10 +239,11 @@ final class Weather {
         }
 
         // the number: white with a dark-blue outline so it reads on top of the waves
-        String s = temp + "°";
+        boolean est = !Float.isNaN(estimate);
+        String s = est ? "~" + Math.round(estimate) + "°" : temp + "°";
         Paint num = new Paint(Paint.ANTI_ALIAS_FLAG);
         num.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
-        num.setTextSize(36 * K);
+        num.setTextSize((s.length() > 3 ? 31 : 36) * K);
         num.setTextAlign(Paint.Align.CENTER);
         num.setStyle(Paint.Style.STROKE);
         num.setStrokeWidth(4 * K);
@@ -256,7 +262,7 @@ final class Weather {
         }
         Paint small = text(16, MUTED, false);
         small.setTextAlign(Paint.Align.CENTER);
-        c.drawText(date, 50 * K, 90 * K, small);
+        c.drawText(est ? temp + "° " + date : date, 50 * K, 90 * K, small);
         return bmp;
     }
 

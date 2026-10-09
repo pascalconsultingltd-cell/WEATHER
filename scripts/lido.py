@@ -2,6 +2,10 @@
 
 The page is a plain table, newest reading first: Date | Lido | Ladies' Pond | Men's Pond | Mixed Pond.
 Dates have no year ("Monday 05 October"), so the year is inferred: the most recent one that is not in the future.
+
+The Lido is only published about weekly, so an estimate for today is added: starting from the last reading,
+each later day moves the water RATE of the way towards that day's average daytime air temperature (+ OFFSET).
+RATE and OFFSET were fitted on the readings since April 2024 (about 0.7 C average error against the next reading).
 """
 import datetime
 import html
@@ -12,12 +16,30 @@ import urllib.request
 
 URL = ('https://www.cityoflondon.gov.uk/things-to-do/green-spaces/hampstead-heath/'
        'activities-at-hampstead-heath/swimming-at-hampstead-heath/water-temperatures')
+FORECAST = ('https://api.open-meteo.com/v1/forecast?latitude=51.553&longitude=-0.142&hourly=temperature_2m,is_day'
+            '&current=temperature_2m&past_days=92&forecast_days=1&timezone=Europe%2FLondon')
+RATE, OFFSET = 0.17, 0.1
 KEYS = {'lido': 'lido', "ladies' pond": 'ladies', "men's pond": 'mens', 'mixed pond': 'mixed'}
 
 
 def cells(row):
     return [html.unescape(re.sub(r'<[^>]+>', '', c)).replace('\u2019', "'").strip()
             for c in re.findall(r'<t[dh][^>]*>(.*?)</t[dh]>', row, re.S)]
+
+
+def estimate(reading, reading_date):
+    """Returns (estimate for today, today's date in London), walking forward from the last reading."""
+    j = json.load(urllib.request.urlopen(FORECAST, timeout=30))
+    today = j['current']['time'][:10]
+    days = {}
+    for t, temp, is_day in zip(j['hourly']['time'], j['hourly']['temperature_2m'], j['hourly']['is_day']):
+        if temp is not None and is_day:
+            days.setdefault(t[:10], []).append(temp)       # today's later hours are forecast values
+    water = float(reading)
+    for day in sorted(days):
+        if reading_date < day <= today:
+            water += RATE * (sum(days[day]) / len(days[day]) + OFFSET - water)
+    return round(water, 1), today
 
 
 def main():
@@ -40,6 +62,10 @@ def main():
         for key, i in col.items():
             v = re.match(r'(\d+)', row[i]) if i < len(row) else None
             out[key] = int(v.group(1)) if v else None
+        try:
+            out['estimate'], out['estimate_date'] = estimate(out['lido'], out['date'])
+        except Exception as e:                # the reading is still worth saving without it
+            print('no estimate:', e)
         with open('lido.json', 'w', encoding='utf-8', newline='\n') as f:
             json.dump(out, f, indent=2)
             f.write('\n')

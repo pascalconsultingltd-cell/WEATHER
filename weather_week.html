@@ -130,7 +130,7 @@ function drawWeek(d) {
       start = -1;
     }
   })();
-  var TAGW = 164, TAGR = Math.floor(d.NOW) * step + 4 + TAGW;   // width and right edge of the now tag in the top-left corner
+  var TAGW = 196, TAGR = Math.floor(d.NOW) * step + 4 + TAGW;   // width and right edge of the now tag in the top-left corner
   // moon phase, drawn in the sky in the middle of each night
   function drawMoons() {
     var r = 10, cy = T + 17;
@@ -265,7 +265,12 @@ function drawWeek(d) {
     [RC, 'Rain ' + at(RAIN) + '%']
   ];
   // latest published Lido water temperature and the day it was measured
-  if (LIDO && LIDO.lido != null) rows.push(['var(--accent)', 'Lido ' + LIDO.lido + '° · ' + new Date(LIDO.date + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })]);
+  // (the Lido is published about weekly; "~" is today's estimate worked out from the air temperatures since then)
+  if (LIDO && LIDO.lido != null) {
+    var lidoDay = new Date(LIDO.date + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+    var est = LIDO.estimate != null && LIDO.estimate_date !== LIDO.date;
+    rows.push(['var(--accent)', est ? 'Lido ~' + Math.round(LIDO.estimate) + '° (' + LIDO.lido + '° ' + lidoDay + ')' : 'Lido ' + LIDO.lido + '° · ' + lidoDay]);
+  }
   out += '<rect x="' + tx + '" y="' + ty + '" width="' + TAGW + '" height="' + (rows.length * 17 + 9) + '" rx="5" fill="var(--surface)" fill-opacity="0.3" stroke="var(--line)" stroke-opacity="0.7"/>';
   rows.forEach(function (r, i) {
     out += '<text x="' + (tx + 7) + '" y="' + (ty + 18 + i * 17) + '" font-size="14" font-weight="' + (i ? 500 : 700) + '" fill="' + r[0] + '" stroke="var(--surface)" stroke-width="2.5" stroke-opacity="0.6" paint-order="stroke" ' + mono + '>' + r[1] + '</text>';
