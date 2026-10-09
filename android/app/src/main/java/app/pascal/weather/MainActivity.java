@@ -28,7 +28,16 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        // opening the app also brings the widgets up to date
+        // coming back to the app reloads the forecast so the chart starts at the real "now"
+        web.onResume();
+        web.evaluateJavascript("if (typeof load === 'function') load();", null);
+        // and brings the widgets up to date
         Weather.refresh(getApplicationContext(), null);
+    }
+
+    @Override
+    protected void onPause() {
+        web.onPause();
+        super.onPause();
     }
 }

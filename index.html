@@ -82,7 +82,7 @@ var STEP = 18;                   // chart units per hour
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text and fewer hours per screen
 var STRONG = 25;                 // km/h: the wind/gust band is drawn darker above this level
 var ARROW2 = 30, ARROW3 = 45;    // km/h gust: wind arrows get a double head from ARROW2 and a triple head from ARROW3
-var REFRESH_MIN = 30;            // re-fetch interval while the page is open
+var REFRESH_MIN = 10;            // re-fetch interval while the page is open
 var RAIN_STYLE = 'gradient';     // rain fill: 'gradient' (blue fade), 'bars' (one bar per hour), 'drops' (grey with streaks)
 var ICON_SET = 'meteocons';      // 'meteocons' (drawn icons loaded from jsDelivr) or 'emoji'
 // Hampstead Heath Lido water temperature, saved to the repo by a scheduled job (the City of London publishes it about weekly)
@@ -392,9 +392,9 @@ if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) nav
 // redraw to the new height when the phone is rotated
 window.addEventListener('resize', function () { if (lastData) render(lastData); });
 setInterval(load, REFRESH_MIN * 60000);
-// refresh when the tab is reopened after a while
+// refresh every time the page comes back on screen, so "now" is never stale
 document.addEventListener('visibilitychange', function () {
-  if (!document.hidden && Date.now() - lastLoad > REFRESH_MIN * 60000) load();
+  if (!document.hidden && Date.now() - lastLoad > 60000) load();
 });
 </script>
 </body></html>
