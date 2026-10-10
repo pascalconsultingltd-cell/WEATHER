@@ -97,7 +97,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = 36;              // hours across the screen: 36 when the app opens, then whatever the buttons on top set (0 = the whole week)
-var BUILD = '2026-10-10o';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-10p';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -392,6 +392,9 @@ function drawWeek(d) {
   drawDayTemps();
   // current-time marker with a small tag of the conditions right now (interpolated between the hourly values)
   var nx = x(0) + d.NOW * step;
+  // everything before now is washed out and slightly greyed
+  out += '<rect x="' + X0 + '" y="0" width="' + Math.max(0, nx - X0) + '" height="' + (T + ih) + '" fill="var(--surface)" fill-opacity="0.5"/>';
+  out += '<rect x="' + X0 + '" y="0" width="' + Math.max(0, nx - X0) + '" height="' + (T + ih) + '" fill="#6b7780" fill-opacity="0.16"/>';
   out += '<line x1="' + nx + '" x2="' + nx + '" y1="' + T + '" y2="' + (T + ih) + '" stroke="var(--fg)" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="3 3"/>';
   function at(arr) { var i = Math.floor(d.NOW), f = d.NOW - i, b = arr[Math.min(n - 1, i + 1)]; return Math.round(arr[i] + (b - arr[i]) * f); }
   var tx = HOME * step + 4, rows = [   // top tag, in the top-left corner of the plot
@@ -576,10 +579,11 @@ load();
 // installable app: the service worker keeps the app and the last forecast available offline
 if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) navigator.serviceWorker.register('sw.js');
 // Touch: a tap or a press puts the crosshair on that hour (keep the finger down to drag it, tap again to remove it);
+// dragging up or down in the top panel moves the wind and temperature curves (a tap on an axis puts them back);
 // a two-finger pinch squeezes or stretches the time axis around the fingers. A plain swipe still scrolls the week.
 (function () {
   var sc = document.querySelector('.scroll'), svg = document.getElementById('wxchart');
-  var mode = '', sx = 0, sy = 0, timer = 0, pinch = null, want = null;
+  var mode = '', sx = 0, sy = 0, timer = 0, pinch = null, want = null, o0 = 0, lifting = false;
   function point() {
     var v = VIEW, r = svg.getBoundingClientRect();
     if (!v) return;
@@ -623,7 +627,16 @@ if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) nav
       sx = e.touches[0].clientX; sy = e.touches[0].clientY;
       point();
     } else if (mode === 'press' && (Math.abs(e.touches[0].clientX - sx) > 8 || Math.abs(e.touches[0].clientY - sy) > 8)) {
-      clearTimeout(timer); mode = 'scroll';
+      clearTimeout(timer);
+      // a drag that goes up or down, starting in the wind and temperature panel, moves those two scales; sideways scrolls the week
+      var up = Math.abs(e.touches[0].clientY - sy) > Math.abs(e.touches[0].clientX - sx);
+      mode = up && VIEW && (sy - svg.getBoundingClientRect().top) / ZOOM <= VIEW.T + VIEW.ihU ? 'lift' : 'scroll';
+      o0 = VO;
+    }
+    if (mode === 'lift') {
+      e.preventDefault();
+      VO = Math.min(o0 + VIEW.ihU, Math.max(o0 - VIEW.ihU, o0 + (e.touches[0].clientY - sy) / ZOOM));
+      if (!lifting) { lifting = true; requestAnimationFrame(function () { lifting = false; drawWeek(VIEW.d); }); }
     }
   }, { passive: false });
   function end(e) {
