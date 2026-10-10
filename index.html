@@ -104,7 +104,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = 36;              // hours across the screen: 36 when the app opens, then whatever the buttons on top set (0 = the whole week)
-var BUILD = '2026-10-10r';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-10s';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -142,7 +142,19 @@ function drawWeek(d) {
   var WMAX = Math.max(30, Math.ceil(maxG / 30) * 30);              // 3 gridline intervals
   var RMAX = Math.min(100, Math.max(30, Math.ceil(Math.max.apply(null, RAIN) / 30) * 30));
   var MMAX = [1, 2, 4, 6, 10, 20, 40].filter(function (m) { return m >= Math.max.apply(null, MM); })[0] || 80;   // mm scale of the rain bars
-  var tLo = Math.min.apply(null, TEMP.concat(FEEL)), tHi = Math.max.apply(null, TEMP.concat(FEEL));   // the scale holds the feels-like curve too
+  // Lido water temperature for each day on the chart: today's figure, then each later day moves 0.17 of the way towards
+  // that day's mean daytime air temperature + 0.1 (the same rule as scripts/lido.py). Days before today repeat today's figure.
+  var POOL = [];
+  if (LIDO && LIDO.lido != null) {
+    var water = LIDO.estimate != null ? LIDO.estimate : LIDO.lido;
+    d.SUN.forEach(function (s, k) {
+      var sum = 0, cnt = 0;
+      for (var i = k * 24 + Math.ceil(s[0]); i <= k * 24 + Math.floor(s[1]); i++) { sum += TEMP[i]; cnt++; }
+      if (k > d.TODAY && cnt) water += 0.17 * (sum / cnt + 0.1 - water);
+      POOL.push(water);
+    });
+  }
+  var tLo = Math.min.apply(null, TEMP.concat(FEEL, POOL)), tHi = Math.max.apply(null, TEMP.concat(FEEL, POOL));   // the scale holds the feels-like and Lido curves too
   var TMIN = Math.floor(tLo / 5) * 5 - 0;
   var TSTEP = Math.max(5, Math.ceil((tHi - TMIN) / 3 / 5) * 5);
   var TMAX = TMIN + TSTEP * 3;
@@ -354,6 +366,18 @@ function drawWeek(d) {
   }
   out += '<path d="' + curve(fp) + '" fill="none" stroke="' + GOLD + '" stroke-width="1.6" stroke-dasharray="4 3" stroke-linecap="round" clip-path="url(#wxup)"/>';
   out += '<path d="' + curve(tp) + '" fill="none" stroke="' + GOLD + '" stroke-width="2.8" stroke-linecap="round" clip-path="url(#wxup)"/>';
+  // Lido water temperature as a bold blue line on the temperature scale, one value per day joined smoothly at midday
+  if (POOL.length) {
+    var lp = POOL.map(function (v, k) { return [x(k * 24 + 12), yT(v)]; });
+    lp.unshift([0, lp[0][1]]); lp.push([W, lp[lp.length - 1][1]]);
+    out += '<path d="' + curve(lp) + '" fill="none" stroke="var(--surface)" stroke-width="5.5" stroke-opacity="0.7" clip-path="url(#wxup)"/>';
+    out += '<path d="' + curve(lp) + '" fill="none" stroke="var(--accent)" stroke-width="3.4" stroke-linecap="round" clip-path="url(#wxup)"/>';
+    POOL.forEach(function (v, k) {
+      var ly = yT(v) - 6;
+      if (k < d.TODAY || step * 24 < 50 || ly < T + 9 || ly > T + ihU) return;
+      out += '<text x="' + x(k * 24 + 12) + '" y="' + ly + '" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--accent)" stroke="var(--surface)" stroke-width="2.5" stroke-opacity="0.75" paint-order="stroke" ' + mono + '>Lido ' + Math.floor(v + 1e-6) + '°</text>';
+    });
+  }
   // wind-direction arrows riding just above the gust curve
   GUST.forEach(function (gv, i) {
     if (i % AK || i < H0) return;
@@ -432,7 +456,7 @@ function drawWeek(d) {
   size('axL', 0, AL).innerHTML = axL + '<g id="axLcross"></g>';
   size('axR', 0, AR).innerHTML = axR + '<g id="axRcross"></g>';
   VIEW = { d: d, n: n, step: step, W: W, T: T, ih: ih, ihU: ihU, RTOP: RTOP, H0: H0, X0: X0, x: x, yW: yW, yT: yT, yR: yR,
-    HOME: HOME, vW: vW, vT: vT, RMAX: RMAX, MMAX: MMAX, MARINE: MARINE, TMIN: TMIN, TMAX: TMAX, GOLD: GOLD, RC: RC, mono: mono };
+    HOME: HOME, POOL: POOL, vW: vW, vT: vT, RMAX: RMAX, MMAX: MMAX, MARINE: MARINE, TMIN: TMIN, TMAX: TMAX, GOLD: GOLD, RC: RC, mono: mono };
   drawCross();
   var lab = document.getElementById('rainlab'), box = document.getElementById('axL').getBoundingClientRect();
   lab.innerHTML = 'Rain<small>bars mm/h · line chance %</small>';
@@ -475,6 +499,7 @@ function drawCross() {
     [v.GOLD, 'Temp ' + d.TEMP[i] + '° · feels ' + d.FEEL[i] + '°'],
     [v.RC, 'Rain ' + d.RAIN[i] + '% · ' + d.MM[i] + ' mm']
   ];
+  if (v.POOL.length && Math.floor(i / 24) >= d.TODAY) rows.push(['var(--accent)', 'Lido ~' + Math.floor(v.POOL[Math.floor(i / 24)] + 1e-6) + '°']);
   // the tag sits beside the line, on whichever side has room on screen
   var sc = document.querySelector('.scroll'), vis0 = v.X0 + sc.scrollLeft / ZOOM, vis1 = vis0 + sc.clientWidth / ZOOM;
   var BW = 172, bx = cx + 8, by = v.T + 4;
