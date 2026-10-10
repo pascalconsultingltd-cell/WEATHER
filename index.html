@@ -63,6 +63,7 @@ html, body { height:100%; overflow:hidden; background:var(--surface); }
 .days { display:flex; }
 .day { flex:none; box-sizing:border-box; overflow:clip; height:26px; border-left:1px solid var(--line); border-bottom:1px solid var(--line); }
 .day:first-child { border-left:0; }
+.day.tight b { padding:6px 3px 0; font-size:12px; }
 .day b { position:sticky; left:0; display:inline-block; padding:5px 8px 0; font:700 14px var(--font-display); white-space:nowrap; }
 .day.we { background:var(--weekend); }
 /* only shown when the forecast cannot be loaded */
@@ -85,7 +86,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = 25;              // hours across the screen when the app opens (pinch to change)
-var MAX_DAYS = 3, PXH_MAX = 47;  // pinch limits: most days on one screen, and most screen px per hour
+var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
 var STRONG = 25;                 // km/h: the wind/gust band is drawn darker above this level
 var ARROW2 = 30, ARROW3 = 45;    // km/h gust: wind arrows get a double head from ARROW2 and a triple head from ARROW3
@@ -111,7 +112,7 @@ function drawWeek(d) {
   var H0 = Math.floor(d.NOW), X0 = H0 * step;
   // how often things are drawn, so they never overlap when the time axis is squeezed
   function every(list, min) { for (var q = 0; q < list.length - 1 && list[q] * step < min; q++); return list[q]; }
-  var IK = every([1, 2, 3, 4, 6, 8, 12], 34), HK = every([1, 2, 3, 6, 12], 12), AK = every([1, 2, 3, 4, 6], 12);   // sky icons, hour labels, wind arrows
+  var IK = every([1, 2, 3, 4, 6, 8, 12, 24], 34), HK = every([1, 2, 3, 6, 12], 12), AK = every([1, 2, 3, 4, 6, 8, 12], 12);   // sky icons, hour labels, wind arrows
   var maxG = Math.max.apply(null, GUST);
   var WMAX = Math.max(30, Math.ceil(maxG / 30) * 30);              // 3 gridline intervals
   var RMAX = Math.min(100, Math.max(30, Math.ceil(Math.max.apply(null, RAIN) / 30) * 30));
@@ -139,11 +140,16 @@ function drawWeek(d) {
     return d;
   }
   var out = '', axL = '', axR = '';
-  // the rain panel has a light blue background and a bold marine-blue line along its top, carried across both axes
-  var DIVY = RTOP - 7, MARINE = '#0b3d91';
-  function divider(w) { return '<line x1="0" x2="' + w + '" y1="' + DIVY + '" y2="' + DIVY + '" stroke="' + MARINE + '" stroke-width="2.6"/>'; }
+  // the rain panel has a light blue background
+  var DIVY = RTOP - 5, MARINE = '#0b3d91';
+  // between the panels: a clear band of background, then the marine-blue top edge of the rain panel with a soft shade under it
+  function divider() {
+    return '<rect x="0" y="' + (T + ihU + 0.5) + '" width="' + W + '" height="' + (DIVY - T - ihU - 0.5) + '" fill="var(--surface)"/>' +
+      '<defs><linearGradient id="wxdiv" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="' + MARINE + '" stop-opacity="0.22"/><stop offset="1" stop-color="' + MARINE + '" stop-opacity="0"/></linearGradient></defs>' +
+      '<rect x="0" y="' + DIVY + '" width="' + W + '" height="12" fill="url(#wxdiv)"/>' +
+      '<rect x="0" y="' + DIVY + '" width="' + W + '" height="2" fill="' + MARINE + '"/>';
+  }
   out += '<rect x="0" y="' + DIVY + '" width="' + W + '" height="' + (T + ih - DIVY) + '" fill="var(--rain)" fill-opacity="0.1"/>';
-  axL += divider(AL); axR += divider(AR);
   function xt(t) { return Math.min(W, Math.max(0, x(0) + t * step)); }   // t = hours since 00:00 on day 0
   var nTop = 2, nH = T + ih - nTop;
   // night shading melts in and out around sunrise and sunset (soft gradient, no hard edge)
@@ -166,7 +172,7 @@ function drawWeek(d) {
   // sunny spells (wherever the sky icon is the clear sun) get a yellow shade that melts in and out like the night
   (function () {
     var start = -1;
-    function sunny(i) { return i >= H0 && i < n && ICON[i - (i - H0) % IK][1] === 'clear-day'; }   // the icon shown covers IK hours
+    function sunny(i) { return i >= H0 && i < n && ICON[IK < 6 ? i - (i - H0) % IK : i][1] === 'clear-day'; }   // the icon shown covers IK hours (hour by hour once the icons are sparse)
     for (var i = H0; i <= n; i++) {
       if (sunny(i)) { if (start < 0) start = i; continue; }
       if (start < 0) continue;
@@ -179,7 +185,7 @@ function drawWeek(d) {
   var TAGW = 196, TAGR = X0 + 4 + TAGW, TAGH = (LIDO && LIDO.lido != null ? 5 : 4) * 17 + 9;   // width, right edge and height of the now tag in the top-left corner
   // moon phase, drawn in the sky in the middle of each night
   function drawMoons() {
-    var r = 10;
+    var r = step * 24 < 50 ? 7 : 10;
     for (var k = -1; k < d.SUN.length; k++) {
       var a = k < 0 ? -0.5 : k * 24 + d.SUN[k][1], b = k + 1 < d.SUN.length ? (k + 1) * 24 + d.SUN[k + 1][0] : n - 0.5;
       a = Math.max(a, Math.floor(d.NOW) - 0.5);                      // only the part of the night still on the chart
@@ -206,11 +212,12 @@ function drawWeek(d) {
       for (var i = k * 24 + Math.ceil(s[0]); i <= k * 24 + Math.floor(s[1]); i++) { score += SUNNY[ICON[i][1]] || 0; hrs++; }
       var col = hrs && score / hrs >= 0.5 ? GOLD : GREY;
       var halo = 'stroke="var(--surface)" stroke-opacity="0.75" stroke-linejoin="round" stroke-linecap="round"';
-      var att = 'text-anchor="middle" font-size="24" font-weight="700" fill="' + col + '" stroke-width="4" paint-order="stroke" ' + halo + ' ' + mono;
-      out += '<text x="' + cx + '" y="' + (cy - 7) + '" ' + att + '>' + Math.max.apply(null, t) + '°</text>';
-      out += '<line x1="' + (cx - 21) + '" x2="' + (cx + 21) + '" y1="' + cy + '" y2="' + cy + '" stroke-width="6" ' + halo + '/>';
-      out += '<line x1="' + (cx - 21) + '" x2="' + (cx + 21) + '" y1="' + cy + '" y2="' + cy + '" stroke="' + col + '" stroke-width="2.4" stroke-linecap="round"/>';
-      out += '<text x="' + cx + '" y="' + (cy + 25) + '" ' + att + '>' + Math.min.apply(null, t) + '°</text>';
+      var fs = Math.max(12, Math.min(24, step * 24 * 0.42)), z = fs / 24;   // shrinks to fit a narrow day
+      var att = 'text-anchor="middle" font-size="' + fs + '" font-weight="700" fill="' + col + '" stroke-width="4" paint-order="stroke" ' + halo + ' ' + mono;
+      out += '<text x="' + cx + '" y="' + (cy - 7 * z) + '" ' + att + '>' + Math.max.apply(null, t) + '°</text>';
+      out += '<line x1="' + (cx - 21 * z) + '" x2="' + (cx + 21 * z) + '" y1="' + cy + '" y2="' + cy + '" stroke-width="6" ' + halo + '/>';
+      out += '<line x1="' + (cx - 21 * z) + '" x2="' + (cx + 21 * z) + '" y1="' + cy + '" y2="' + cy + '" stroke="' + col + '" stroke-width="2.4" stroke-linecap="round"/>';
+      out += '<text x="' + cx + '" y="' + (cy + 25 * z) + '" ' + att + '>' + Math.min.apply(null, t) + '°</text>';
     });
   }
   // day dividers at midnight
@@ -268,7 +275,7 @@ function drawWeek(d) {
   MM.forEach(function (v, i) {
     if (v > 0) out += '<rect x="' + (x(i) - step * 0.32) + '" y="' + Math.min(yM(v), T + ih - 1.5) + '" width="' + (step * 0.64) + '" height="' + Math.max(1.5, T + ih - yM(v)) + '" rx="' + Math.min(2, step * 0.2) + '" fill="' + MARINE + '" fill-opacity="0.8"/>';
   });
-  out += divider(W);
+  out += divider();
   drawMoons();
   out += '<path d="' + curve(gp) + '" fill="none" stroke="var(--wind)" stroke-width="1.6" stroke-dasharray="4 3" stroke-linecap="round"/>';
   out += '<path d="' + curve(wp) + '" fill="none" stroke="var(--wind)" stroke-width="2.6" stroke-linecap="round"/>';
@@ -287,7 +294,7 @@ function drawWeek(d) {
   });
   // per-day labels: peak gust, max and min temperature
   function put(i, y, txt, col, below) {
-    if (i < H0) return;   // already past, off the left edge
+    if (i < H0 || step * 24 < 50) return;   // already past, off the left edge; or days too narrow (the big fraction says it)
     var ty = below ? y + 12 : y - 5;
     ty = Math.min(T + ihU - 2, Math.max(T + 9, ty));
     out += '<text x="' + x(i) + '" y="' + ty + '" text-anchor="middle" font-size="9" font-weight="500" fill="' + col + '" ' + mono + '>' + txt + '</text>';
@@ -301,17 +308,22 @@ function drawWeek(d) {
     put(a + t.indexOf(nt), yT(nt), nt + '°', GOLD, true);
     // sunrise / sunset times, centred on the day/night boundary just below the sky icons
     s.forEach(function (v) {
-      if (xt(a + v) < X0 + 13) return;   // would be cut by the left edge
+      if (xt(a + v) < X0 + 13 || (s[1] - s[0]) * step < 30) return;   // would be cut by the left edge, or the two would collide
       out += '<text x="' + xt(a + v) + '" y="36" text-anchor="middle" font-size="8.5" font-weight="500" fill="var(--fg)" ' + mono + '>' + fmt(v) + '</text>';
     });
   });
   for (var i = 0; i < n; i++) {
     var h = i % 24;
-    // one sky icon per IK hours (counted from the current hour), centred over the group
-    var ix = x(i) + (IK - 1) * step / 2;
-    if (i >= H0 && (i - H0) % IK === 0) out += ICON_SET === 'emoji'
-      ? '<text x="' + ix + '" y="26" text-anchor="middle" font-size="24">' + ICON[i][0] + '</text>'
-      : '<image href="' + ICON_BASE + ICON[i][1] + '.svg" x="' + (ix - 19) + '" y="-5" width="38" height="38"/>';
+    // one sky icon per IK hours, centred over the group. Groups count from the current hour; once they are 6 hours
+    // or more they follow the clock instead and show the sky of the hour nearest 13:00
+    var gEnd = IK < 6 ? i + IK : Math.min(n, (Math.floor(i / IK) + 1) * IK);
+    if (i >= H0 && (IK < 6 ? (i - H0) % IK === 0 : i === H0 || i % IK === 0) && (gEnd - i) * step >= 20) {
+      var pick = i, ix = (i + gEnd) / 2 * step, sz = Math.min(38, IK * step + 6);
+      if (IK >= 6) for (var q = i; q < gEnd; q++) if (Math.abs(q % 24 - 13) < Math.abs(pick % 24 - 13)) pick = q;
+      out += ICON_SET === 'emoji'
+        ? '<text x="' + ix + '" y="26" text-anchor="middle" font-size="24">' + ICON[pick][0] + '</text>'
+        : '<image href="' + ICON_BASE + ICON[pick][1] + '.svg" x="' + (ix - sz / 2) + '" y="' + (14 - sz / 2) + '" width="' + sz + '" height="' + sz + '"/>';
+    }
     if (h % HK === 0) out += '<text x="' + x(i) + '" y="' + (H - 5) + '" text-anchor="middle" font-size="8" fill="var(--muted)" ' + mono + '>' + (h < 10 ? '0' + h : h) + '</text>';
   }
   drawDayTemps();
@@ -353,12 +365,12 @@ function drawWeek(d) {
   var lab = document.getElementById('rainlab'), box = document.getElementById('axL').getBoundingClientRect();
   lab.innerHTML = 'Rain<small>bars mm/h · line chance %</small>';
   lab.style.left = (box.right + 5) + 'px';
-  lab.style.top = (box.top + (DIVY + 3) * ZOOM) + 'px';
+  lab.style.top = (box.top + (DIVY + 4) * ZOOM) + 'px';
   // day banner above the plot; the name stays pinned at the left while that day is on screen
   document.getElementById('days').innerHTML = d.DAYS.map(function (day, k) {
     var hours = k ? 24 : 24 - H0, w = hours * PXH;   // today only runs from the current hour
-    var txt = k ? (w >= 150 ? day.label : w >= 66 ? day.short : '') : w >= 210 ? 'Today · ' + day.label : w >= 60 ? 'Today' : '';   // whatever fits
-    return '<div class="day' + (day.we ? ' we' : '') + '" style="width:' + w + 'px"><b>' + txt + '</b></div>';   // weekend banner in yellow
+    var txt = k ? (w >= 150 ? day.label : w >= 66 ? day.short : w >= 34 ? day.short.slice(0, 3) : '') : w >= 210 ? 'Today · ' + day.label : w >= 60 ? 'Today' : '';   // whatever fits
+    return '<div class="day' + (day.we ? ' we' : '') + (w < 66 ? ' tight' : '') + '" style="width:' + w + 'px"><b>' + txt + '</b></div>';   // weekend banner in yellow
   }).join('');
 }
 
@@ -496,7 +508,7 @@ if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) nav
     var w = want;
     want = null;
     if (!w || !VIEW) return;
-    PXH = Math.min(PXH_MAX, Math.max(PLOTW / 24 / MAX_DAYS, w.pxh));
+    PXH = Math.min(PXH_MAX, Math.max(PLOTW / (VIEW.n - VIEW.H0), w.pxh));
     USER_ZOOM = true;
     drawWeek(VIEW.d);
     sc.scrollLeft = w.hour * PXH - (w.x - sc.getBoundingClientRect().left);   // the hour between the fingers stays between them
