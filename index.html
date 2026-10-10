@@ -97,13 +97,14 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = 36;              // hours across the screen: 36 when the app opens, then whatever the buttons on top set (0 = the whole week)
-var BUILD = '2026-10-10n';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-10o';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
 var STRONG = 25;                 // km/h: the wind/gust band is drawn darker above this level
 var ARROW2 = 30, ARROW3 = 45;    // km/h gust: wind arrows get a double head from ARROW2 and a triple head from ARROW3
-var PAST_HOURS = 2;              // hours before now that stay on the chart (never earlier than 00:00 today)
+var PAST_HOURS = 2;              // hours before now at the left edge when the app opens
+var BACK_HOURS = 16;             // how far before now the chart can be dragged back
 var REFRESH_MIN = 10;            // re-fetch interval while the page is open
 var RAIN_STYLE = 'gradient';     // rain fill: 'gradient' (blue fade), 'bars' (one bar per hour), 'drops' (grey with streaks)
 var ICON_SET = 'meteocons';      // 'meteocons' (drawn icons loaded from jsDelivr) or 'emoji'
@@ -112,20 +113,21 @@ var LIDO_URL = 'https://raw.githubusercontent.com/pascalconsultingltd-cell/WEATH
 var ICON_BASE = 'https://cdn.jsdelivr.net/gh/basmilius/weather-icons@dev/production/fill/svg-static/';
 var PXH = 0, USER_ZOOM = false, PLOTW = 0;   // screen px per hour (set to fit FIT_HOURS until the user pinches), width of the plot on screen
 var VS = 1, VO = 0;                          // vertical stretch and shift of the wind and temperature scales, set by sliding on an axis (1 and 0 = automatic)
+var HOMED = false;                           // the chart has been placed on "now" once
 var VIEW = null, CROSS = null;               // geometry of the last drawing, and the crosshair {i: hour index, y: chart units}
 
 // One continuous chart. d: {WIND, GUST (km/h), RAIN (% chance), MM (mm of rain in the hour), TEMP (C), FEEL (feels-like, C), DIR (bearing wind comes FROM), ICON} per hour from 00:00 on day 0,
-// SUN: [[sunrise, sunset], ...] per day in decimal hours, DAYS: [{label, short, we}] per day, NOW: hours since 00:00 on day 0.
+// SUN: [[sunrise, sunset], ...] per day in decimal hours, DAYS: [{label, short, we}] per day, NOW: hours since 00:00 on day 0, TODAY: index of today.
 function drawWeek(d) {
   var WIND = d.WIND, GUST = d.GUST, RAIN = d.RAIN, MM = d.MM, TEMP = d.TEMP, FEEL = d.FEEL, DIR = d.DIR, ICON = d.ICON;
   var chartEl = document.getElementById('chart'), AL = 26, AR = 33;
   PLOTW = chartEl.clientWidth - (AL + AR) * ZOOM;
-  if (!USER_ZOOM) PXH = PLOTW / (FIT_HOURS || WIND.length - Math.max(0, Math.floor(d.NOW) - PAST_HOURS));
+  if (!USER_ZOOM) PXH = PLOTW / (FIT_HOURS || WIND.length - Math.max(0, Math.floor(d.NOW) - PAST_HOURS));   // 0 = from the opening position to the end of the week
   [].forEach.call(document.querySelectorAll('#zoomsel button'), function (b) { b.className = !USER_ZOOM && +b.getAttribute('data-h') === FIT_HOURS ? 'on' : ''; });
   var n = WIND.length, step = PXH / ZOOM, W = n * step, H = Math.max(200, Math.floor((chartEl.clientHeight - 26) / ZOOM)), T = 38, B = 18, ih = H - T - B;
   // two panels: wind and temperature on top (height ihU), rain chance below (height RH, top edge at RTOP)
   var RH = Math.round(ih * RAIN_SPLIT), ihU = ih - RH - 23, RTOP = T + ih - RH;
-  var H0 = Math.max(0, Math.floor(d.NOW) - PAST_HOURS), X0 = H0 * step;   // first hour on the chart: a little before now
+  var HOME = Math.max(0, Math.floor(d.NOW) - PAST_HOURS), H0 = Math.max(0, Math.floor(d.NOW) - BACK_HOURS), X0 = H0 * step;   // hour at the left edge on opening; first hour drawn
   // how often things are drawn, so they never overlap when the time axis is squeezed
   function every(list, min) { for (var q = 0; q < list.length - 1 && list[q] * step < min; q++); return list[q]; }
   var IK = every([1, 2, 3, 4, 6, 8, 12, 24], 34), HK = every([1, 2, 3, 6, 12], 14), AK = every([1, 2, 3, 4, 6, 8, 12], 12);   // sky icons, hour labels, wind arrows
@@ -169,6 +171,7 @@ function drawWeek(d) {
     // the days again in that band (weekends in yellow), each name centred on the part of its day that is on the chart
     d.DAYS.forEach(function (day, k) {
       var a = Math.max(k * 24, H0) * step, b = (k + 1) * 24 * step, w = b - a;
+      if (w <= 0) return;
       var txt = w >= 100 ? day.label : w >= 44 ? day.short : w >= 24 ? day.short.slice(0, 3) : '';
       if (day.we) band += '<rect x="' + a + '" y="' + (T + ihU + 0.5) + '" width="' + w + '" height="' + (DIVY - T - ihU - 0.5) + '" fill="var(--weekend)"/>';
       if (k) band += '<line x1="' + a + '" x2="' + a + '" y1="' + (T + ihU) + '" y2="' + DIVY + '" stroke="var(--line)" stroke-width="1"/>';
@@ -391,13 +394,13 @@ function drawWeek(d) {
   var nx = x(0) + d.NOW * step;
   out += '<line x1="' + nx + '" x2="' + nx + '" y1="' + T + '" y2="' + (T + ih) + '" stroke="var(--fg)" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="3 3"/>';
   function at(arr) { var i = Math.floor(d.NOW), f = d.NOW - i, b = arr[Math.min(n - 1, i + 1)]; return Math.round(arr[i] + (b - arr[i]) * f); }
-  var tx = X0 + 4, rows = [   // top tag, in the top-left corner of the plot
-    ['var(--fg)', 'Now ' + fmt(d.NOW)],
+  var tx = HOME * step + 4, rows = [   // top tag, in the top-left corner of the plot
+    ['var(--fg)', 'Now ' + fmt(d.NOW - d.TODAY * 24)],
     ['var(--wind)', 'Wind ' + at(WIND) + ' · gust ' + at(GUST)],
     [GOLD, 'Temp ' + at(TEMP) + '° · feels ' + at(FEEL) + '°']
   ], wet = [   // bottom tag, in the rain panel
     // the night in progress (until sunrise) or the coming one (tonight's sunset to tomorrow's sunrise)
-    ['var(--night)', d.NOW < d.SUN[0][0] ? 'Night until ' + fmt(d.SUN[0][0]) : 'Night ' + fmt(d.SUN[0][1]) + '–' + fmt(d.SUN[1][0])],
+    ['var(--night)', d.NOW - d.TODAY * 24 < d.SUN[d.TODAY][0] ? 'Night until ' + fmt(d.SUN[d.TODAY][0]) : 'Night ' + fmt(d.SUN[d.TODAY][1]) + '–' + fmt(d.SUN[d.TODAY + 1][0])],
     [RC, 'Rain ' + at(RAIN) + '%' + (MM[Math.floor(d.NOW)] ? ' · ' + MM[Math.floor(d.NOW)] + ' mm' : '')]
   ];
   // latest published Lido water temperature and the day it was measured
@@ -427,7 +430,7 @@ function drawWeek(d) {
   size('axL', 0, AL).innerHTML = axL + '<g id="axLcross"></g>';
   size('axR', 0, AR).innerHTML = axR + '<g id="axRcross"></g>';
   VIEW = { d: d, n: n, step: step, W: W, T: T, ih: ih, ihU: ihU, RTOP: RTOP, H0: H0, X0: X0, x: x, yW: yW, yT: yT, yR: yR,
-    vW: vW, vT: vT, RMAX: RMAX, MMAX: MMAX, MARINE: MARINE, TMIN: TMIN, TMAX: TMAX, GOLD: GOLD, RC: RC, mono: mono };
+    HOME: HOME, vW: vW, vT: vT, RMAX: RMAX, MMAX: MMAX, MARINE: MARINE, TMIN: TMIN, TMAX: TMAX, GOLD: GOLD, RC: RC, mono: mono };
   drawCross();
   var lab = document.getElementById('rainlab'), box = document.getElementById('axL').getBoundingClientRect();
   lab.innerHTML = 'Rain<small>bars mm/h · line chance %</small>';
@@ -435,10 +438,13 @@ function drawWeek(d) {
   lab.style.top = (box.top + (DIVY + 4) * ZOOM) + 'px';
   // day banner above the plot; the name stays pinned at the left while that day is on screen
   document.getElementById('days').innerHTML = d.DAYS.map(function (day, k) {
-    var hours = k ? 24 : 24 - H0, w = hours * PXH;   // today only runs from the current hour
-    var txt = k ? (w >= 150 ? day.label : w >= 66 ? day.short : w >= 34 ? day.short.slice(0, 3) : '') : w >= 210 ? 'Today · ' + day.label : w >= 60 ? 'Today' : '';   // whatever fits
+    var hours = (k + 1) * 24 - Math.max(k * 24, H0), w = hours * PXH;   // the first day only runs from the first hour drawn
+    if (hours <= 0) return '';
+    var txt = k !== d.TODAY ? (w >= 150 ? day.label : w >= 66 ? day.short : w >= 34 ? day.short.slice(0, 3) : '') : w >= 210 ? 'Today · ' + day.label : w >= 60 ? 'Today' : '';   // whatever fits
     return '<div class="day' + (day.we ? ' we' : '') + (w < 66 ? ' tight' : '') + '" style="width:' + w + 'px"><b>' + txt + '</b></div>';   // weekend banner in yellow
   }).join('');
+  // on opening, the left edge is a little before now; the earlier hours are there to drag back to
+  if (!HOMED) { HOMED = true; document.querySelector('.scroll').scrollLeft = (HOME - H0) * PXH; }
 }
 
 // Crosshair: a line on one hour with that hour's values in a tag beside it, and a level line whose value is read on the axes.
@@ -525,7 +531,8 @@ function render(j) {
   }
   // "now" in the forecast location's own timezone
   var loc = new Date(Date.now() + j.utc_offset_seconds * 1000);
-  d.NOW = loc.getUTCHours() + loc.getUTCMinutes() / 60;
+  d.TODAY = Math.max(0, j.daily.time.indexOf(loc.toISOString().slice(0, 10)));   // which of the days is today (the first one is yesterday)
+  d.NOW = d.TODAY * 24 + loc.getUTCHours() + loc.getUTCMinutes() / 60;
   d.T0 = Date.parse(j.daily.time[0] + 'T00:00:00Z') - j.utc_offset_seconds * 1000;   // 00:00 local on day 0
   d.DAYS = [];
   j.daily.time.forEach(function (date, k) {
@@ -558,7 +565,7 @@ function load() {
     .catch(function () {});   // the chart works without it
   var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + LAT + '&longitude=' + LON +
     '&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m,is_day' +
-    '&daily=sunrise,sunset&wind_speed_unit=kmh&timezone=' + encodeURIComponent(TZ) + '&forecast_days=' + DAYS;
+    '&daily=sunrise,sunset&wind_speed_unit=kmh&timezone=' + encodeURIComponent(TZ) + '&forecast_days=' + DAYS + '&past_days=1';   // yesterday too, for the hours before now
   fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function (j) { lastLoad = Date.now(); lastData = j; render(j); })
     .catch(function (e) {
@@ -588,7 +595,7 @@ if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) nav
     var w = want;
     want = null;
     if (!w || !VIEW) return;
-    PXH = Math.min(PXH_MAX, Math.max(PLOTW / (VIEW.n - VIEW.H0), w.pxh));
+    PXH = Math.min(PXH_MAX, Math.max(PLOTW / (VIEW.n - VIEW.HOME), w.pxh));
     USER_ZOOM = true;
     drawWeek(VIEW.d);
     sc.scrollLeft = w.hour * PXH - (w.x - sc.getBoundingClientRect().left);   // the hour between the fingers stays between them
@@ -674,10 +681,15 @@ document.getElementById('zoomsel').addEventListener('click', function (e) {
   var hour = sc.scrollLeft / PXH;
   FIT_HOURS = +h; USER_ZOOM = false;
   drawWeek(VIEW.d);
-  sc.scrollLeft = hour * PXH;
+  sc.scrollLeft = (FIT_HOURS ? hour : VIEW.HOME - VIEW.H0) * PXH;   // the whole week only fits from the opening position
 });
 // redraw to the new height when the phone is rotated
-window.addEventListener('resize', function () { if (lastData) render(lastData); });
+window.addEventListener('resize', function () {
+  if (!lastData) return;
+  var sc = document.querySelector('.scroll'), hour = PXH ? sc.scrollLeft / PXH : 0;   // the hour at the left edge stays there
+  render(lastData);
+  sc.scrollLeft = hour * PXH;
+});
 setInterval(load, REFRESH_MIN * 60000);
 // refresh every time the page comes back on screen, so "now" is never stale
 document.addEventListener('visibilitychange', function () {
