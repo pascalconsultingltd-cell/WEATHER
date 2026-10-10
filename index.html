@@ -104,7 +104,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = 36;              // hours across the screen: 36 when the app opens, then whatever the buttons on top set (0 = the whole week)
-var BUILD = '2026-10-10q';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-10r';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -418,7 +418,7 @@ function drawWeek(d) {
   if (LIDO && LIDO.lido != null) {
     var lidoDay = new Date(LIDO.date + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
     var est = LIDO.estimate != null && LIDO.estimate_date !== LIDO.date;
-    wet.push(['var(--accent)', est ? 'Lido ~' + Math.floor(LIDO.estimate) + '° (' + LIDO.lido + '° ' + lidoDay + ')' : 'Lido ' + LIDO.lido + '° · ' + lidoDay]);
+    rows.push(['var(--accent)', est ? 'Lido ~' + Math.floor(LIDO.estimate) + '° (' + LIDO.lido + '° ' + lidoDay + ')' : 'Lido ' + LIDO.lido + '° · ' + lidoDay]);
   }
   // The chart starts at the current hour (everything earlier is cropped off) and is as tall as the screen.
   function size(id, vx, vw) {
