@@ -240,7 +240,7 @@ final class Weather {
 
         // the number: white with a dark-blue outline so it reads on top of the waves
         boolean est = !Float.isNaN(estimate);
-        String s = est ? "~" + Math.round(estimate) + "°" : temp + "°";
+        String s = est ? "~" + (int) Math.floor(estimate) + "°" : temp + "°";
         Paint num = new Paint(Paint.ANTI_ALIAS_FLAG);
         num.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
         num.setTextSize((s.length() > 3 ? 31 : 36) * K);

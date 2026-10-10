@@ -290,7 +290,7 @@ function drawWeek(d) {
   if (LIDO && LIDO.lido != null) {
     var lidoDay = new Date(LIDO.date + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
     var est = LIDO.estimate != null && LIDO.estimate_date !== LIDO.date;
-    rows.push(['var(--accent)', est ? 'Lido ~' + Math.round(LIDO.estimate) + '° (' + LIDO.lido + '° ' + lidoDay + ')' : 'Lido ' + LIDO.lido + '° · ' + lidoDay]);
+    rows.push(['var(--accent)', est ? 'Lido ~' + Math.floor(LIDO.estimate) + '° (' + LIDO.lido + '° ' + lidoDay + ')' : 'Lido ' + LIDO.lido + '° · ' + lidoDay]);
   }
   out += '<rect x="' + tx + '" y="' + ty + '" width="' + TAGW + '" height="' + (rows.length * 17 + 9) + '" rx="5" fill="var(--surface)" fill-opacity="0.3" stroke="var(--line)" stroke-opacity="0.7"/>';
   rows.forEach(function (r, i) {
