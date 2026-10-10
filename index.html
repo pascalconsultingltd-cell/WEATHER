@@ -97,9 +97,10 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = 36;              // hours across the screen: 36 when the app opens, then whatever the buttons on top set (0 = the whole week)
-var BUILD = '2026-10-10e';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-10f';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
+var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
 var STRONG = 25;                 // km/h: the wind/gust band is drawn darker above this level
 var ARROW2 = 30, ARROW3 = 45;    // km/h gust: wind arrows get a double head from ARROW2 and a triple head from ARROW3
 var REFRESH_MIN = 10;            // re-fetch interval while the page is open
@@ -113,10 +114,10 @@ var WIND_TOPS = [15, 30, 45, 60, 90, 120, 150], TEMP_STEPS = [2, 3, 5, 10, 15]; 
 var WUSER = 0, TUSER = 0;                    // top of the wind scale and degrees per gridline chosen by sliding on an axis; 0 = automatic
 var VIEW = null, CROSS = null;               // geometry of the last drawing, and the crosshair {i: hour index, y: chart units}
 
-// One continuous chart. d: {WIND, GUST (km/h), RAIN (% chance), MM (mm of rain in the hour), TEMP (C), DIR (bearing wind comes FROM), ICON} per hour from 00:00 on day 0,
+// One continuous chart. d: {WIND, GUST (km/h), RAIN (% chance), MM (mm of rain in the hour), TEMP (C), FEEL (feels-like, C), DIR (bearing wind comes FROM), ICON} per hour from 00:00 on day 0,
 // SUN: [[sunrise, sunset], ...] per day in decimal hours, DAYS: [{label, short, we}] per day, NOW: hours since 00:00 on day 0.
 function drawWeek(d) {
-  var WIND = d.WIND, GUST = d.GUST, RAIN = d.RAIN, MM = d.MM, TEMP = d.TEMP, DIR = d.DIR, ICON = d.ICON;
+  var WIND = d.WIND, GUST = d.GUST, RAIN = d.RAIN, MM = d.MM, TEMP = d.TEMP, FEEL = d.FEEL, DIR = d.DIR, ICON = d.ICON;
   var chartEl = document.getElementById('chart'), AL = 26, AR = 30;
   PLOTW = chartEl.clientWidth - (AL + AR) * ZOOM;
   if (!USER_ZOOM) PXH = PLOTW / (FIT_HOURS || WIND.length - Math.floor(d.NOW));
@@ -132,7 +133,7 @@ function drawWeek(d) {
   var WMAX = WUSER || Math.max(30, Math.ceil(maxG / 30) * 30);     // 3 gridline intervals
   var RMAX = Math.min(100, Math.max(30, Math.ceil(Math.max.apply(null, RAIN) / 30) * 30));
   var MMAX = [1, 2, 4, 6, 10, 20, 40].filter(function (m) { return m >= Math.max.apply(null, MM); })[0] || 80;   // mm scale of the rain bars
-  var tLo = Math.min.apply(null, TEMP), tHi = Math.max.apply(null, TEMP);
+  var tLo = Math.min.apply(null, TEMP.concat(FEEL)), tHi = Math.max.apply(null, TEMP.concat(FEEL));   // the scale holds the feels-like curve too
   var TMIN = Math.floor(tLo / 5) * 5 - 0;
   var TSTEP = Math.max(5, Math.ceil((tHi - TMIN) / 3 / 5) * 5);
   if (TUSER) {   // scale chosen on the axis: start just under the coldest hour, or centre on the week if that cannot hold it all
@@ -276,6 +277,20 @@ function drawWeek(d) {
   out += '<path clip-path="url(#wxstrong)" d="' + curve(gp) + curve(wp.slice().reverse(), true) + ' Z" fill="url(#wxg)" stroke="none"/>';
   if (yS >= T) out += '<line x1="0" x2="' + W + '" y1="' + yS + '" y2="' + yS + '" stroke="var(--wind)" stroke-width="0.9" stroke-dasharray="1 3" stroke-opacity="0.8"/>';
   if (yS >= T) axL += '<text x="21" y="' + (yS + 3) + '" text-anchor="end" font-size="8" fill="var(--wind)" ' + mono + '>' + STRONG + '</text>';
+  // gold band between the temperature curve and the feels-like curve, darker where it rises above the WARM level
+  var fp = FEEL.map(function (v, i) { return [x(i), yT(v)]; }), yH = yT(WARM), feelBand = curve(tp) + curve(fp.slice().reverse(), true) + ' Z';
+  out += '<path d="' + feelBand + '" fill="' + GOLD + '" fill-opacity="0.18" stroke="none" clip-path="url(#wxup)"/>';
+  if (yH > T) {
+    out += '<defs><linearGradient id="wxwarmg" gradientUnits="userSpaceOnUse" x1="0" y1="' + yH + '" x2="0" y2="' + yT(WARM + 15) + '">' +
+      '<stop offset="0" stop-color="' + GOLD + '" stop-opacity="0"/><stop offset="0.12" stop-color="#d99a00" stop-opacity="0.6"/>' +
+      '<stop offset="0.5" stop-color="#c07a00" stop-opacity="0.82"/><stop offset="1" stop-color="#8a4b00" stop-opacity="0.95"/></linearGradient></defs>';
+    out += '<clipPath id="wxwarm"><rect x="0" y="' + T + '" width="' + W + '" height="' + Math.min(ihU, yH - T) + '"/></clipPath>';
+    out += '<path clip-path="url(#wxwarm)" d="' + feelBand + '" fill="url(#wxwarmg)" stroke="none"/>';
+    if (yH <= T + ihU) {
+      out += '<line x1="0" x2="' + W + '" y1="' + yH + '" y2="' + yH + '" stroke="' + GOLD + '" stroke-width="0.9" stroke-dasharray="1 3" stroke-opacity="0.9"/>';
+      axR += '<text x="4" y="' + (yH + 3) + '" text-anchor="start" font-size="8" fill="' + GOLD + '" ' + mono + '>' + WARM + '°</text>';
+    }
+  }
   // rain chance filled from the 0 axis so any rain is obvious
   var rainArea = curve(rp, false, true) + ' L' + x(n - 1) + ',' + (T + ih) + ' L' + x(0) + ',' + (T + ih) + ' Z';
   if (RAIN_STYLE === 'drops') {
@@ -307,6 +322,7 @@ function drawWeek(d) {
     out += '<clipPath id="wxrainline"><rect x="0" y="' + (RTOP - 2) + '" width="' + W + '" height="' + (RH + 2 - 1.2) + '"/></clipPath>';
     out += '<path clip-path="url(#wxrainline)" d="' + curve(rp, false, true) + '" fill="none" stroke="' + RC + '" stroke-width="2.2" stroke-linejoin="round"/>';
   }
+  out += '<path d="' + curve(fp) + '" fill="none" stroke="' + GOLD + '" stroke-width="1.6" stroke-dasharray="4 3" stroke-linecap="round" clip-path="url(#wxup)"/>';
   out += '<path d="' + curve(tp) + '" fill="none" stroke="' + GOLD + '" stroke-width="2.8" stroke-linecap="round" clip-path="url(#wxup)"/>';
   // wind-direction arrows riding just above the gust curve
   GUST.forEach(function (gv, i) {
@@ -357,7 +373,7 @@ function drawWeek(d) {
   var tx = X0 + 4, ty = T + 42, rows = [   // top-left corner of the plot, under the row of moons
     ['var(--fg)', 'Now ' + fmt(d.NOW)],
     ['var(--wind)', 'Wind ' + at(WIND) + ' · gust ' + at(GUST)],
-    [GOLD, 'Temp ' + at(TEMP) + '°'],
+    [GOLD, 'Temp ' + at(TEMP) + '° · feels ' + at(FEEL) + '°'],
     [RC, 'Rain ' + at(RAIN) + '%' + (MM[H0] ? ' · ' + MM[H0] + ' mm' : '')]
   ];
   // latest published Lido water temperature and the day it was measured
@@ -407,13 +423,13 @@ function drawCross() {
   var o = '<line x1="' + cx + '" x2="' + cx + '" y1="' + v.T + '" y2="' + bot + '" stroke="var(--fg)" stroke-width="1"/>' +
     '<line x1="' + v.X0 + '" x2="' + v.W + '" y1="' + cy + '" y2="' + cy + '" stroke="var(--fg)" stroke-width="0.7" stroke-opacity="0.6"/>';
   [[v.yW(d.GUST[i]), 'var(--surface)', 'var(--wind)'], [v.yW(d.WIND[i]), 'var(--wind)', 'var(--surface)'],
-   [v.yT(d.TEMP[i]), v.GOLD, 'var(--surface)'], [v.yR(d.RAIN[i]), v.RC, 'var(--surface)']].forEach(function (p) {
+   [v.yT(d.FEEL[i]), 'var(--surface)', v.GOLD], [v.yT(d.TEMP[i]), v.GOLD, 'var(--surface)'], [v.yR(d.RAIN[i]), v.RC, 'var(--surface)']].forEach(function (p) {
     if (p[0] >= v.T - 1) o += '<circle cx="' + cx + '" cy="' + p[0] + '" r="3.4" fill="' + p[1] + '" stroke="' + p[2] + '" stroke-width="1.4"/>';
   });
   var rows = [
     ['var(--fg)', d.DAYS[Math.floor(i / 24)].short + ' · ' + (h < 10 ? '0' : '') + h + ':00'],
     ['var(--wind)', 'Wind ' + d.WIND[i] + ' · gust ' + d.GUST[i] + ' ' + ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(d.DIR[i] / 45) % 8]],
-    [v.GOLD, 'Temp ' + d.TEMP[i] + '°'],
+    [v.GOLD, 'Temp ' + d.TEMP[i] + '° · feels ' + d.FEEL[i] + '°'],
     [v.RC, 'Rain ' + d.RAIN[i] + '% · ' + d.MM[i] + ' mm']
   ];
   // the tag sits beside the line, on whichever side has room on screen
@@ -468,13 +484,14 @@ function num(v) { return v == null ? 0 : Math.round(v); }
 var lastLoad = 0, lastData = null;
 function render(j) {
   var h = j.hourly, nDays = j.daily.time.length, n = nDays * 24;
-  var d = { WIND: [], GUST: [], RAIN: [], MM: [], TEMP: [], DIR: [], ICON: [], SUN: [] };
+  var d = { WIND: [], GUST: [], RAIN: [], MM: [], TEMP: [], FEEL: [], DIR: [], ICON: [], SUN: [] };
   for (var i = 0; i < n; i++) {
     d.WIND.push(num(h.wind_speed_10m[i]));
     d.GUST.push(Math.max(num(h.wind_gusts_10m[i]), num(h.wind_speed_10m[i])));
     d.RAIN.push(num(h.precipitation_probability[i]));
     d.MM.push(Math.round((h.precipitation[i] || 0) * 10) / 10);
     d.TEMP.push(num(h.temperature_2m[i]));
+    d.FEEL.push(num(h.apparent_temperature[i]));
     d.DIR.push(h.wind_direction_10m[i] || 0);
     d.ICON.push(icon(h.weather_code[i], h.is_day[i]));
   }
@@ -512,7 +529,7 @@ function load() {
     .then(function (v) { if (v) { LIDO = v; if (lastData) render(lastData); } })
     .catch(function () {});   // the chart works without it
   var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + LAT + '&longitude=' + LON +
-    '&hourly=temperature_2m,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m,is_day' +
+    '&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m,is_day' +
     '&daily=sunrise,sunset&wind_speed_unit=kmh&timezone=' + encodeURIComponent(TZ) + '&forecast_days=' + DAYS;
   fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function (j) { lastLoad = Date.now(); lastData = j; render(j); })
