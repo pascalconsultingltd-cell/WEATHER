@@ -6,10 +6,14 @@ Dates have no year ("Monday 05 October"), so the year is inferred: the most rece
 The Lido is only published about weekly, so an estimate for today is added: starting from the last reading,
 each later day moves the water RATE of the way towards that day's average daytime air temperature (+ OFFSET).
 RATE and OFFSET were fitted on the readings since April 2024 (about 0.7 C average error against the next reading).
+
+Readings seen in person (the board at the Lido is updated daily) can be added to scripts/lido_manual.json as
+{"date": "YYYY-MM-DD", "lido": 14}; the newest reading, published or manual, is the one the estimate starts from.
 """
 import datetime
 import html
 import json
+import os
 import re
 import sys
 import urllib.request
@@ -62,6 +66,12 @@ def main():
         for key, i in col.items():
             v = re.match(r'(\d+)', row[i]) if i < len(row) else None
             out[key] = int(v.group(1)) if v else None
+        manual = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lido_manual.json')
+        if os.path.exists(manual):
+            with open(manual, encoding='utf-8') as f:
+                seen = max(json.load(f) or [{'date': ''}], key=lambda r: r['date'])
+            if seen['date'] >= out['date'] and seen.get('lido') is not None:
+                out['date'], out['lido'], out['manual'] = seen['date'], seen['lido'], True
         try:
             out['estimate'], out['estimate_date'] = estimate(out['lido'], out['date'])
         except Exception as e:                # the reading is still worth saving without it
