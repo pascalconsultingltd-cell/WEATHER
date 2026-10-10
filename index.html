@@ -97,7 +97,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = 36;              // hours across the screen: 36 when the app opens, then whatever the buttons on top set (0 = the whole week)
-var BUILD = '2026-10-10i';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-10j';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -110,8 +110,7 @@ var ICON_SET = 'meteocons';      // 'meteocons' (drawn icons loaded from jsDeliv
 var LIDO_URL = 'https://raw.githubusercontent.com/pascalconsultingltd-cell/WEATHER/main/lido.json', LIDO = null;
 var ICON_BASE = 'https://cdn.jsdelivr.net/gh/basmilius/weather-icons@dev/production/fill/svg-static/';
 var PXH = 0, USER_ZOOM = false, PLOTW = 0;   // screen px per hour (set to fit FIT_HOURS until the user pinches), width of the plot on screen
-var WIND_TOPS = [15, 30, 45, 60, 90, 120, 150], TEMP_STEPS = [2, 3, 5, 10, 15];   // scales offered when sliding on the wind (left) and temperature (right) axes
-var WUSER = 0, TUSER = 0;                    // top of the wind scale and degrees per gridline chosen by sliding on an axis; 0 = automatic
+var VS = 1, VO = 0;                          // vertical stretch and shift of the wind and temperature scales, set by sliding on an axis (1 and 0 = automatic)
 var VIEW = null, CROSS = null;               // geometry of the last drawing, and the crosshair {i: hour index, y: chart units}
 
 // One continuous chart. d: {WIND, GUST (km/h), RAIN (% chance), MM (mm of rain in the hour), TEMP (C), FEEL (feels-like, C), DIR (bearing wind comes FROM), ICON} per hour from 00:00 on day 0,
@@ -130,27 +129,27 @@ function drawWeek(d) {
   function every(list, min) { for (var q = 0; q < list.length - 1 && list[q] * step < min; q++); return list[q]; }
   var IK = every([1, 2, 3, 4, 6, 8, 12, 24], 34), HK = every([1, 2, 3, 6, 12], 14), AK = every([1, 2, 3, 4, 6, 8, 12], 12);   // sky icons, hour labels, wind arrows
   var maxG = Math.max.apply(null, GUST);
-  var WMAX = WUSER || Math.max(30, Math.ceil(maxG / 30) * 30);     // 3 gridline intervals
+  var WMAX = Math.max(30, Math.ceil(maxG / 30) * 30);              // 3 gridline intervals
   var RMAX = Math.min(100, Math.max(30, Math.ceil(Math.max.apply(null, RAIN) / 30) * 30));
   var MMAX = [1, 2, 4, 6, 10, 20, 40].filter(function (m) { return m >= Math.max.apply(null, MM); })[0] || 80;   // mm scale of the rain bars
   var tLo = Math.min.apply(null, TEMP.concat(FEEL)), tHi = Math.max.apply(null, TEMP.concat(FEEL));   // the scale holds the feels-like curve too
   var TMIN = Math.floor(tLo / 5) * 5 - 0;
   var TSTEP = Math.max(5, Math.ceil((tHi - TMIN) / 3 / 5) * 5);
-  if (TUSER) {   // scale chosen on the axis: start just under the coldest hour, or centre on the week if that cannot hold it all
-    TSTEP = TUSER;
-    TMIN = Math.floor(tLo / TSTEP) * TSTEP;
-    if (TMIN + 3 * TSTEP < tHi) TMIN = Math.round(((tLo + tHi) / 2 - 1.5 * TSTEP) / TSTEP) * TSTEP;
-  }
   var TMAX = TMIN + TSTEP * 3;
   var GOLD = '#e0a800', GREY = '#7d8993';
   var RC = RAIN_STYLE === 'drops' ? GREY : 'var(--rain)';   // rain colour
   var mono = 'font-family="DM Mono, monospace"';
   function x(i) { return (i + 0.5) * step; }
-  function yW(v) { return T + ihU - (v / WMAX) * ihU; }
+  // Sliding on an axis stretches the top panel: every height in it goes through vy(), wind and temperature alike.
+  VO = Math.max(VO, (T + ihU) * (1 - VS));   // the 0 km/h line never rises off the bottom of the panel
+  function vy(y) { return VS * y + VO; }
+  function yW(v) { return vy(T + ihU - (v / WMAX) * ihU); }
+  function vW(y) { return (T + ihU - (y - VO) / VS) / ihU * WMAX; }                     // wind speed at a height
+  function vT(y) { return TMIN + (T + ihU - (y - VO) / VS) / ihU * (TMAX - TMIN); }     // temperature at a height
   function yR(v) { return T + ih - (v / RMAX) * RH; }
   function yM(v) { return T + ih - (v / MMAX) * RH; }
-  function yT(v) { return T + ihU - ((v - TMIN) / (TMAX - TMIN)) * ihU; }
-  function clampY(y, rain) { return Math.min(rain ? T + ih : T + ihU, Math.max(rain ? RTOP : T, y)); }
+  function yT(v) { return vy(T + ihU - ((v - TMIN) / (TMAX - TMIN)) * ihU); }
+  function clampY(y, rain) { return Math.min(rain ? T + ih : vy(T + ihU), Math.max(rain ? RTOP : vy(T), y)); }
   function curve(pts, cont, rain) {
     var d = (cont ? ' L' : 'M') + pts[0][0] + ',' + pts[0][1];
     for (var i = 0; i < pts.length - 1; i++) {
@@ -255,12 +254,24 @@ function drawWeek(d) {
   for (var k = 1; k < d.SUN.length; k++) {
     out += '<line x1="' + (k * 24 * step) + '" x2="' + (k * 24 * step) + '" y1="0" y2="' + H + '" stroke="var(--line)" stroke-width="1"/>';
   }
-  for (var g = 0; g <= 3; g++) {
-    var gy = T + ihU - (g / 3) * ihU;
-    out += '<line x1="0" x2="' + W + '" y1="' + gy + '" y2="' + gy + '" stroke="var(--line)" stroke-width="1"/>';
-    axL += '<text x="21" y="' + (gy + 4) + '" text-anchor="end" font-size="11" fill="var(--wind)" ' + mono + '>' + Math.round(g / 3 * WMAX) + '</text>';
-    axR += '<text x="4" y="' + (gy + 4) + '" text-anchor="start" font-size="11" fill="' + GOLD + '" ' + mono + '>' + (TMIN + g * TSTEP) + '°</text>';
+  // gridlines sit on round wind speeds and the temperature labels on round degrees, wherever the stretch puts them
+  // (on the automatic scale the two coincide: four lines, each with both values)
+  function ticks(lo, hi, steps) {
+    var st = steps[steps.length - 1], list = [];
+    for (var q = steps.length - 1; q >= 0; q--) if ((hi - lo) / steps[q] <= 3.3) st = steps[q];
+    for (var v = Math.ceil(lo / st - 1e-6) * st; v <= hi + st * 1e-6; v += st) list.push(v);
+    return list;
   }
+  var g, gy;
+  out += '<line x1="0" x2="' + W + '" y1="' + (T + ihU) + '" y2="' + (T + ihU) + '" stroke="var(--line)" stroke-width="1"/>';
+  ticks(Math.max(0, vW(T + ihU)), vW(T), [1, 2, 5, 10, 15, 20, 30, 40, 50, 100]).forEach(function (v) {
+    var y = yW(v);
+    out += '<line x1="0" x2="' + W + '" y1="' + y + '" y2="' + y + '" stroke="var(--line)" stroke-width="1"/>';
+    axL += '<text x="21" y="' + (y + 4) + '" text-anchor="end" font-size="11" fill="var(--wind)" ' + mono + '>' + v + '</text>';
+  });
+  ticks(vT(T + ihU), vT(T), [1, 2, 3, 5, 10, 15, 20]).forEach(function (v) {
+    axR += '<text x="4" y="' + (yT(v) + 4) + '" text-anchor="start" font-size="11" fill="' + GOLD + '" ' + mono + '>' + v + '°</text>';
+  });
   for (g = 0; g <= 2; g++) {
     gy = T + ih - (g / 2) * RH;
     out += '<line x1="0" x2="' + W + '" y1="' + gy + '" y2="' + gy + '" stroke="var(--line)" stroke-width="1"/>';
@@ -282,10 +293,10 @@ function drawWeek(d) {
   var RAMP = [[0, 'var(--wind)', 0], [5, '#0f9a40', 0.55], [15, '#0b7a33', 0.8], [35, '#06501f', 0.92], [100 - STRONG, '#010a04', 0.98]];
   var stops = RAMP.map(function (r) { return '<stop offset="' + (r[0] / (100 - STRONG)) + '" style="stop-color:' + r[1] + '" stop-opacity="' + r[2] + '"/>'; }).join('');
   out += '<defs><linearGradient id="wxg" gradientUnits="userSpaceOnUse" x1="0" y1="' + gy1 + '" x2="0" y2="' + gy2 + '">' + stops + '</linearGradient></defs>';
-  out += '<clipPath id="wxstrong"><rect x="0" y="' + T + '" width="' + W + '" height="' + Math.max(0, yS - T) + '"/></clipPath>';
+  out += '<clipPath id="wxstrong"><rect x="0" y="' + T + '" width="' + W + '" height="' + Math.max(0, Math.min(ihU, yS - T)) + '"/></clipPath>';
   out += '<path clip-path="url(#wxstrong)" d="' + curve(gp) + curve(wp.slice().reverse(), true) + ' Z" fill="url(#wxg)" stroke="none"/>';
-  if (yS >= T) out += '<line x1="0" x2="' + W + '" y1="' + yS + '" y2="' + yS + '" stroke="var(--wind)" stroke-width="0.9" stroke-dasharray="1 3" stroke-opacity="0.8"/>';
-  if (yS >= T) axL += '<text x="21" y="' + (yS + 3.5) + '" text-anchor="end" font-size="10" fill="var(--wind)" ' + mono + '>' + STRONG + '</text>';
+  if (yS >= T && yS <= T + ihU) out += '<line x1="0" x2="' + W + '" y1="' + yS + '" y2="' + yS + '" stroke="var(--wind)" stroke-width="0.9" stroke-dasharray="1 3" stroke-opacity="0.8"/>';
+  if (yS >= T && yS <= T + ihU) axL += '<text x="21" y="' + (yS + 3.5) + '" text-anchor="end" font-size="10" fill="var(--wind)" ' + mono + '>' + STRONG + '</text>';
   // gold band between the temperature curve and the feels-like curve, darker where it rises above the WARM level
   var fp = FEEL.map(function (v, i) { return [x(i), yT(v)]; }), yH = yT(WARM), feelBand = curve(tp) + curve(fp.slice().reverse(), true) + ' Z';
   out += '<path d="' + feelBand + '" fill="' + GOLD + '" fill-opacity="0.18" stroke="none" clip-path="url(#wxup)"/>';
@@ -337,12 +348,13 @@ function drawWeek(d) {
   GUST.forEach(function (gv, i) {
     if (i % AK || i < H0) return;
     var ay = Math.max(T + 8, yW(gv) - 11), rot = DIR[i] + 180;
+    if (ay > T + ihU - 4) return;   // the gust curve is below the panel here
     var heads = gv >= ARROW3 ? 3 : gv >= ARROW2 ? 2 : 1, head = [' M-3,-1.5 L0,-5.5 L3,-1.5', ' M-3,1.7 L0,-2.3 L3,1.7', ' M-3,4.9 L0,0.9 L3,4.9'];
     out += '<g transform="translate(' + x(i) + ',' + ay + ') rotate(' + rot + ')" stroke="#06501f" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M0,' + (heads > 2 ? 6.5 : 5) + ' L0,-5' + head.slice(0, heads).join('') + '"/></g>';
   });
   // per-day labels: peak gust, max and min temperature
   function put(i, y, txt, col, below) {
-    if (i < H0 || step * 24 < 50) return;   // already past, off the left edge; or days too narrow (the big fraction says it)
+    if (i < H0 || step * 24 < 50 || y < T - 1 || y > T + ihU + 1) return;   // already past; days too narrow (the big fraction says it); or stretched out of the panel
     var ty = below ? y + 12 : y - 5;
     ty = Math.min(T + ihU - 2, Math.max(T + 9, ty));
     out += '<text x="' + x(i) + '" y="' + ty + '" text-anchor="middle" font-size="9" font-weight="500" fill="' + col + '" ' + mono + '>' + txt + '</text>';
@@ -351,7 +363,7 @@ function drawWeek(d) {
   d.SUN.forEach(function (s, k) {
     var a = k * 24, g = GUST.slice(a, a + 24), t = TEMP.slice(a, a + 24);
     var mg = Math.max.apply(null, g), mt = Math.max.apply(null, t), nt = Math.min.apply(null, t);
-    if (a + g.indexOf(mg) >= H0) out += '<text x="' + x(a + g.indexOf(mg)) + '" y="' + Math.max(T + 9, yW(mg) - 20) + '" text-anchor="middle" font-size="9" font-weight="500" fill="var(--wind)" ' + mono + '>' + mg + '</text>';
+    if (a + g.indexOf(mg) >= H0 && yW(mg) - 20 < T + ihU) out += '<text x="' + x(a + g.indexOf(mg)) + '" y="' + Math.max(T + 9, yW(mg) - 20) + '" text-anchor="middle" font-size="9" font-weight="500" fill="var(--wind)" ' + mono + '>' + mg + '</text>';
     put(a + t.indexOf(mt), yT(mt), mt + '°', GOLD, false);
     put(a + t.indexOf(nt), yT(nt), nt + '°', GOLD, true);
     // sunrise / sunset times, centred on the day/night boundary just below the sky icons
@@ -411,7 +423,7 @@ function drawWeek(d) {
   size('axL', 0, AL).innerHTML = axL + '<g id="axLcross"></g>';
   size('axR', 0, AR).innerHTML = axR + '<g id="axRcross"></g>';
   VIEW = { d: d, n: n, step: step, W: W, T: T, ih: ih, ihU: ihU, RTOP: RTOP, H0: H0, X0: X0, x: x, yW: yW, yT: yT, yR: yR,
-    WMAX: WMAX, TSTEP: TSTEP, RMAX: RMAX, MMAX: MMAX, MARINE: MARINE, TMIN: TMIN, TMAX: TMAX, GOLD: GOLD, RC: RC, mono: mono };
+    vW: vW, vT: vT, RMAX: RMAX, MMAX: MMAX, MARINE: MARINE, TMIN: TMIN, TMAX: TMAX, GOLD: GOLD, RC: RC, mono: mono };
   drawCross();
   var lab = document.getElementById('rainlab'), box = document.getElementById('axL').getBoundingClientRect();
   lab.innerHTML = 'Rain<small>bars mm/h · line chance %</small>';
@@ -435,8 +447,8 @@ function drawCross() {
   var o = '<line x1="' + cx + '" x2="' + cx + '" y1="' + v.T + '" y2="' + bot + '" stroke="var(--fg)" stroke-width="1"/>' +
     '<line x1="' + v.X0 + '" x2="' + v.W + '" y1="' + cy + '" y2="' + cy + '" stroke="var(--fg)" stroke-width="0.7" stroke-opacity="0.6"/>';
   [[v.yW(d.GUST[i]), 'var(--surface)', 'var(--wind)'], [v.yW(d.WIND[i]), 'var(--wind)', 'var(--surface)'],
-   [v.yT(d.FEEL[i]), 'var(--surface)', v.GOLD], [v.yT(d.TEMP[i]), v.GOLD, 'var(--surface)'], [v.yR(d.RAIN[i]), v.RC, 'var(--surface)']].forEach(function (p) {
-    if (p[0] >= v.T - 1) o += '<circle cx="' + cx + '" cy="' + p[0] + '" r="3.4" fill="' + p[1] + '" stroke="' + p[2] + '" stroke-width="1.4"/>';
+   [v.yT(d.FEEL[i]), 'var(--surface)', v.GOLD], [v.yT(d.TEMP[i]), v.GOLD, 'var(--surface)'], [v.yR(d.RAIN[i]), v.RC, 'var(--surface)', 1]].forEach(function (p) {
+    if (p[3] || (p[0] >= v.T - 1 && p[0] <= v.T + v.ihU + 1)) o += '<circle cx="' + cx + '" cy="' + p[0] + '" r="3.4" fill="' + p[1] + '" stroke="' + p[2] + '" stroke-width="1.4"/>';
   });
   var rows = [
     ['var(--fg)', d.DAYS[Math.floor(i / 24)].short + ' · ' + (h < 10 ? '0' : '') + h + ':00'],
@@ -459,10 +471,10 @@ function drawCross() {
     return '<rect x="' + xa + '" y="' + (cy - 6.5) + '" width="' + w + '" height="13" rx="2" fill="var(--surface)" stroke="' + col + '" stroke-width="0.7"/>' +
       '<text x="' + (xa + w / 2) + '" y="' + (cy + 3.7) + '" text-anchor="middle" font-size="10.5" font-weight="700" fill="' + col + '" ' + mono + '>' + txt + '</text>';
   }
-  var f = (v.T + v.ihU - cy) / v.ihU;
-  gl.innerHTML = f >= 0 ? chip(1, 24, Math.round(f * v.WMAX), 'var(--wind)')
+  var f = v.T + v.ihU - cy;
+  gl.innerHTML = f >= 0 ? chip(1, 24, Math.round(v.vW(cy)), 'var(--wind)')
     : cy >= v.RTOP ? chip(1, 24, ((bot - cy) / (bot - v.RTOP) * v.MMAX).toFixed(1), v.MARINE) : '';
-  gr.innerHTML = f >= 0 ? chip(1, 31, Math.round(v.TMIN + f * (v.TMAX - v.TMIN)) + '°', v.GOLD)
+  gr.innerHTML = f >= 0 ? chip(1, 31, Math.round(v.vT(cy)) + '°', v.GOLD)
     : cy >= v.RTOP ? chip(1, 31, Math.round((bot - cy) / (bot - v.RTOP) * v.RMAX) + '%', v.RC) : '';
 }
 // WMO weather code -> [emoji, Meteocons icon name]
@@ -612,26 +624,29 @@ if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) nav
   sc.addEventListener('touchend', end);
   sc.addEventListener('touchcancel', end);
   sc.addEventListener('contextmenu', function (e) { e.preventDefault(); });
-  // Sliding a finger up on the wind (left) or temperature (right) axis expands that scale, sliding down compresses it,
-  // one step of the list per 28 px. A tap on the axis goes back to the automatic scale.
-  function axis(id, list, cur, set) {
-    var el = document.getElementById(id), y0 = 0, i0 = 0, moved = false;
+  // Sliding a finger up on either axis stretches the wind and temperature scales together, sliding down squeezes them,
+  // smoothly and around the level under the finger. A tap on an axis goes back to the automatic scale.
+  function axis(id) {
+    var el = document.getElementById(id), y0 = 0, s0 = 1, yc = 0, ya = 0, moved = false, busy = false;
     el.addEventListener('touchstart', function (e) {
       if (!VIEW) return;
-      y0 = e.touches[0].clientY; moved = false; i0 = 0;
-      for (var k = 1; k < list.length; k++) if (Math.abs(list[k] - cur()) < Math.abs(list[i0] - cur())) i0 = k;
+      y0 = e.touches[0].clientY; moved = false; s0 = VS;
+      yc = Math.min(VIEW.T + VIEW.ihU, Math.max(VIEW.T, (y0 - el.getBoundingClientRect().top) / ZOOM));   // where the finger is, in chart units
+      ya = (yc - VO) / VS;                                                                                // and what is drawn there
     }, { passive: true });
     el.addEventListener('touchmove', function (e) {
       if (!VIEW) return;
       e.preventDefault();
-      var dy = y0 - e.touches[0].clientY, v = list[Math.min(list.length - 1, Math.max(0, i0 - Math.round(dy / 28)))];
-      if (Math.abs(dy) > 8) moved = true;
-      if (moved && v !== cur()) { set(v); drawWeek(VIEW.d); }
+      var dy = y0 - e.touches[0].clientY;
+      if (Math.abs(dy) > 6) moved = true;
+      if (!moved) return;
+      VS = Math.min(8, Math.max(0.5, s0 * Math.exp(dy / 160)));
+      VO = yc - VS * ya;
+      if (!busy) { busy = true; requestAnimationFrame(function () { busy = false; drawWeek(VIEW.d); }); }
     }, { passive: false });
-    el.addEventListener('touchend', function () { if (VIEW && !moved) { set(0); drawWeek(VIEW.d); } });
+    el.addEventListener('touchend', function () { if (VIEW && !moved) { VS = 1; VO = 0; drawWeek(VIEW.d); } });
   }
-  axis('axL', WIND_TOPS, function () { return VIEW.WMAX; }, function (v) { WUSER = v; });
-  axis('axR', TEMP_STEPS, function () { return VIEW.TSTEP; }, function (v) { TUSER = v; });
+  axis('axL'); axis('axR');
 })();
 // The buttons on top set how many days fill the screen, keeping the hour at the left edge where it is.
 document.getElementById('zoomsel').addEventListener('click', function (e) {
