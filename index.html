@@ -76,9 +76,16 @@ html, body { height:100%; overflow:hidden; background:var(--surface); }
 /* title of the rain panel, pinned to its top-left corner while the chart scrolls underneath */
 .rainlab { position:fixed; z-index:1; pointer-events:none; white-space:nowrap; color:#0b3d91; font:700 14px var(--font-display); text-shadow:0 0 3px var(--surface), 0 0 3px var(--surface); }
 .rainlab small { margin-left:5px; color:var(--muted); font:400 10px var(--font-data); }
+/* how many days fill the screen: three buttons over the right end of the day banner */
+.zoomsel { position:fixed; z-index:2; top:env(safe-area-inset-top); right:env(safe-area-inset-right); height:26px; display:flex; align-items:center; gap:3px; padding:0 4px;
+  background:var(--surface); border-left:1px solid var(--line); border-bottom:1px solid var(--line); box-sizing:border-box; }
+.zoomsel button { margin:0; padding:0; width:34px; height:20px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--muted);
+  font:700 11px var(--font-display); -webkit-tap-highlight-color:transparent; }
+.zoomsel button.on { background:#0b3d91; border-color:#0b3d91; color:#fff; }
 </style></head><body>
 <p class="status" id="status"></p>
 <div class="rainlab" id="rainlab"></div>
+<div class="zoomsel" id="zoomsel"><button data-h="36">1.5d</button><button data-h="72">3d</button><button data-h="0">7d</button></div>
 <div class="chart" id="chart">
   <svg id="axL"></svg>
   <div class="scroll"><div class="days" id="days"></div><svg id="wxchart" role="img" aria-label="Hourly forecast chart, 7 days"></svg></div>
@@ -89,7 +96,8 @@ html, body { height:100%; overflow:hidden; background:var(--surface); }
 var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
-var FIT_HOURS = 72;              // hours across the screen when the app opens (pinch to change)
+var FIT_HOURS = 36;              // hours across the screen: 36 when the app opens, then whatever the buttons on top set (0 = the whole week)
+var BUILD = '2026-10-10e';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
 var STRONG = 25;                 // km/h: the wind/gust band is drawn darker above this level
@@ -111,7 +119,8 @@ function drawWeek(d) {
   var WIND = d.WIND, GUST = d.GUST, RAIN = d.RAIN, MM = d.MM, TEMP = d.TEMP, DIR = d.DIR, ICON = d.ICON;
   var chartEl = document.getElementById('chart'), AL = 26, AR = 30;
   PLOTW = chartEl.clientWidth - (AL + AR) * ZOOM;
-  if (!USER_ZOOM) PXH = PLOTW / FIT_HOURS;
+  if (!USER_ZOOM) PXH = PLOTW / (FIT_HOURS || WIND.length - Math.floor(d.NOW));
+  [].forEach.call(document.querySelectorAll('#zoomsel button'), function (b) { b.className = !USER_ZOOM && +b.getAttribute('data-h') === FIT_HOURS ? 'on' : ''; });
   var n = WIND.length, step = PXH / ZOOM, W = n * step, H = Math.max(200, Math.floor((chartEl.clientHeight - 26) / ZOOM)), T = 38, B = 18, ih = H - T - B;
   // two panels: wind and temperature on top (height ihU), rain chance below (height RH, top edge at RTOP)
   var RH = Math.round(ih * RAIN_SPLIT), ihU = ih - RH - 14, RTOP = T + ih - RH;
@@ -194,7 +203,7 @@ function drawWeek(d) {
       start = -1;
     }
   })();
-  var TAGW = 196, TAGR = X0 + 4 + TAGW, TAGH = (LIDO && LIDO.lido != null ? 5 : 4) * 17 + 9;   // width, right edge and height of the now tag in the top-left corner
+  var TAGW = 196;   // width of the now tag
   // moon phase, drawn in the sky in the middle of each night
   function drawMoons() {
     var r = step * 24 < 50 ? 7 : 10;
@@ -204,7 +213,7 @@ function drawWeek(d) {
       if (b - a < 3) continue;
       var t = (a + b) / 2, m = moon(d.T0 + t * 3600000), cx = xt(t), cy = T + 17;
       var label = ((b - a) * step < 95 ? '' : m.name + ' ') + Math.round(m.lit * 100) + '%';   // no room for the name when squeezed
-      if (cx < TAGR + 60) { cy = T + 4 + TAGH + 16; cx = Math.max(cx, X0 + label.length * 2.5 + 4); }   // drops below the now tag
+      cx = Math.max(cx, X0 + Math.max(r, label.length * 2.5) + 3);   // kept whole at the left edge
       var p = m.phase < 0.5 ? m.phase : 1 - m.phase;                 // mirrored for the waning half
       var rx = Math.abs(Math.cos(2 * Math.PI * p)) * r;
       out += '<g transform="translate(' + cx + ',' + cy + ')' + (m.phase < 0.5 ? '' : ' scale(-1,1)') + '">' +
@@ -345,7 +354,7 @@ function drawWeek(d) {
   var nx = x(0) + d.NOW * step;
   out += '<line x1="' + nx + '" x2="' + nx + '" y1="' + T + '" y2="' + (T + ih) + '" stroke="var(--fg)" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="3 3"/>';
   function at(arr) { var i = Math.floor(d.NOW), f = d.NOW - i, b = arr[Math.min(n - 1, i + 1)]; return Math.round(arr[i] + (b - arr[i]) * f); }
-  var tx = X0 + 4, ty = T + 4, rows = [   // top-left corner of the plot
+  var tx = X0 + 4, ty = T + 42, rows = [   // top-left corner of the plot, under the row of moons
     ['var(--fg)', 'Now ' + fmt(d.NOW)],
     ['var(--wind)', 'Wind ' + at(WIND) + ' · gust ' + at(GUST)],
     [GOLD, 'Temp ' + at(TEMP) + '°'],
@@ -486,7 +495,19 @@ function render(j) {
   drawWeek(d);
   document.getElementById('status').textContent = '';
 }
+// The app keeps this page open for days, so it checks for a newer build each time it loads the forecast and reloads itself once.
+function checkBuild() {
+  if (location.protocol.indexOf('http') !== 0) return;
+  fetch('index.html?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.text() : ''; }).then(function (t) {
+    var m = /var BUILD = '([^']+)'/.exec(t), tried = null;
+    try { tried = sessionStorage.getItem('build'); } catch (e) {}
+    if (!m || m[1] === BUILD || m[1] === tried) return;
+    try { sessionStorage.setItem('build', m[1]); } catch (e) {}
+    location.replace(location.pathname + '?v=' + encodeURIComponent(m[1]));
+  }).catch(function () {});
+}
 function load() {
+  checkBuild();
   fetch(LIDO_URL).then(function (r) { return r.ok ? r.json() : null; })
     .then(function (v) { if (v) { LIDO = v; if (lastData) render(lastData); } })
     .catch(function () {});   // the chart works without it
@@ -583,6 +604,15 @@ if ('serviceWorker' in navigator && location.protocol.indexOf('http') === 0) nav
   axis('axL', WIND_TOPS, function () { return VIEW.WMAX; }, function (v) { WUSER = v; });
   axis('axR', TEMP_STEPS, function () { return VIEW.TSTEP; }, function (v) { TUSER = v; });
 })();
+// The buttons on top set how many days fill the screen, keeping the hour at the left edge where it is.
+document.getElementById('zoomsel').addEventListener('click', function (e) {
+  var h = e.target.getAttribute('data-h'), sc = document.querySelector('.scroll');
+  if (h == null || !VIEW) return;
+  var hour = sc.scrollLeft / PXH;
+  FIT_HOURS = +h; USER_ZOOM = false;
+  drawWeek(VIEW.d);
+  sc.scrollLeft = hour * PXH;
+});
 // redraw to the new height when the phone is rotated
 window.addEventListener('resize', function () { if (lastData) render(lastData); });
 setInterval(load, REFRESH_MIN * 60000);

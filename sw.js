@@ -17,7 +17,9 @@ function put(req, res) {
 }
 // fresh copy when online, last saved copy when offline
 function networkFirst(req) {
-  return fetch(req).then(function (res) { return put(req, res); }).catch(function () { return caches.match(req, { ignoreSearch: req.mode === 'navigate' }); });
+  // the app's own files are revalidated every time (GitHub Pages lets browsers reuse them for 10 minutes otherwise)
+  var own = new URL(req.url).hostname === location.hostname;
+  return (own ? fetch(req.url, { cache: 'no-cache' }) : fetch(req)).then(function (res) { return put(req, res); }).catch(function () { return caches.match(req, { ignoreSearch: req.mode === 'navigate' }); });
 }
 // saved copy if there is one (the icon files never change), otherwise fetch and save
 function cacheFirst(req) {
