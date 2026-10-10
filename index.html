@@ -77,10 +77,10 @@ html, body { height:100%; overflow:hidden; background:var(--surface); }
 .rainlab { position:fixed; z-index:1; pointer-events:none; white-space:nowrap; color:#0b3d91; font:700 14px var(--font-display); text-shadow:0 0 3px var(--surface), 0 0 3px var(--surface); }
 .rainlab small { margin-left:5px; color:var(--muted); font:400 10px var(--font-data); }
 /* how many days fill the screen: three buttons over the right end of the day banner */
-.zoomsel { position:fixed; z-index:2; top:env(safe-area-inset-top); right:env(safe-area-inset-right); height:26px; display:flex; align-items:center; gap:3px; padding:0 4px;
+.zoomsel { position:fixed; z-index:2; top:env(safe-area-inset-top); right:env(safe-area-inset-right); height:30px; display:flex; align-items:center; gap:4px; padding:0 5px; border-bottom-left-radius:8px;
   background:var(--surface); border-left:1px solid var(--line); border-bottom:1px solid var(--line); box-sizing:border-box; }
-.zoomsel button { margin:0; padding:0; width:34px; height:20px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--muted);
-  font:700 11px var(--font-display); -webkit-tap-highlight-color:transparent; }
+.zoomsel button { margin:0; padding:0; width:44px; height:25px; border:1px solid var(--line); border-radius:13px; background:var(--surface); color:var(--muted);
+  font:700 13.5px var(--font-display); -webkit-tap-highlight-color:transparent; }
 .zoomsel button.on { background:#0b3d91; border-color:#0b3d91; color:#fff; }
 </style></head><body>
 <p class="status" id="status"></p>
@@ -97,7 +97,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = 36;              // hours across the screen: 36 when the app opens, then whatever the buttons on top set (0 = the whole week)
-var BUILD = '2026-10-10f';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-10g';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -118,17 +118,17 @@ var VIEW = null, CROSS = null;               // geometry of the last drawing, an
 // SUN: [[sunrise, sunset], ...] per day in decimal hours, DAYS: [{label, short, we}] per day, NOW: hours since 00:00 on day 0.
 function drawWeek(d) {
   var WIND = d.WIND, GUST = d.GUST, RAIN = d.RAIN, MM = d.MM, TEMP = d.TEMP, FEEL = d.FEEL, DIR = d.DIR, ICON = d.ICON;
-  var chartEl = document.getElementById('chart'), AL = 26, AR = 30;
+  var chartEl = document.getElementById('chart'), AL = 26, AR = 33;
   PLOTW = chartEl.clientWidth - (AL + AR) * ZOOM;
   if (!USER_ZOOM) PXH = PLOTW / (FIT_HOURS || WIND.length - Math.floor(d.NOW));
   [].forEach.call(document.querySelectorAll('#zoomsel button'), function (b) { b.className = !USER_ZOOM && +b.getAttribute('data-h') === FIT_HOURS ? 'on' : ''; });
   var n = WIND.length, step = PXH / ZOOM, W = n * step, H = Math.max(200, Math.floor((chartEl.clientHeight - 26) / ZOOM)), T = 38, B = 18, ih = H - T - B;
   // two panels: wind and temperature on top (height ihU), rain chance below (height RH, top edge at RTOP)
-  var RH = Math.round(ih * RAIN_SPLIT), ihU = ih - RH - 14, RTOP = T + ih - RH;
+  var RH = Math.round(ih * RAIN_SPLIT), ihU = ih - RH - 23, RTOP = T + ih - RH;
   var H0 = Math.floor(d.NOW), X0 = H0 * step;
   // how often things are drawn, so they never overlap when the time axis is squeezed
   function every(list, min) { for (var q = 0; q < list.length - 1 && list[q] * step < min; q++); return list[q]; }
-  var IK = every([1, 2, 3, 4, 6, 8, 12, 24], 34), HK = every([1, 2, 3, 6, 12], 12), AK = every([1, 2, 3, 4, 6, 8, 12], 12);   // sky icons, hour labels, wind arrows
+  var IK = every([1, 2, 3, 4, 6, 8, 12, 24], 34), HK = every([1, 2, 3, 6, 12], 14), AK = every([1, 2, 3, 4, 6, 8, 12], 12);   // sky icons, hour labels, wind arrows
   var maxG = Math.max.apply(null, GUST);
   var WMAX = WUSER || Math.max(30, Math.ceil(maxG / 30) * 30);     // 3 gridline intervals
   var RMAX = Math.min(100, Math.max(30, Math.ceil(Math.max.apply(null, RAIN) / 30) * 30));
@@ -166,7 +166,16 @@ function drawWeek(d) {
   var DIVY = RTOP - 5, MARINE = '#0b3d91';
   // between the panels: a clear band of background, then the marine-blue top edge of the rain panel with a soft shade under it
   function divider() {
-    return '<rect x="0" y="' + (T + ihU + 0.5) + '" width="' + W + '" height="' + (DIVY - T - ihU - 0.5) + '" fill="var(--surface)"/>' +
+    var band = '<rect x="0" y="' + (T + ihU + 0.5) + '" width="' + W + '" height="' + (DIVY - T - ihU - 0.5) + '" fill="var(--surface)"/>';
+    // the days again in that band (weekends in yellow), each name centred on the part of its day that is on the chart
+    d.DAYS.forEach(function (day, k) {
+      var a = Math.max(k * 24, H0) * step, b = (k + 1) * 24 * step, w = b - a;
+      var txt = w >= 100 ? day.label : w >= 44 ? day.short : w >= 24 ? day.short.slice(0, 3) : '';
+      if (day.we) band += '<rect x="' + a + '" y="' + (T + ihU + 0.5) + '" width="' + w + '" height="' + (DIVY - T - ihU - 0.5) + '" fill="var(--weekend)"/>';
+      if (k) band += '<line x1="' + a + '" x2="' + a + '" y1="' + (T + ihU) + '" y2="' + DIVY + '" stroke="var(--line)" stroke-width="1"/>';
+      band += '<text x="' + (a + w / 2) + '" y="' + (T + ihU + 13) + '" text-anchor="middle" font-size="11" font-weight="700" fill="var(--fg)" font-family="Bricolage Grotesque, Helvetica Neue, Arial, sans-serif">' + txt + '</text>';
+    });
+    return band +
       '<defs><linearGradient id="wxdiv" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="' + MARINE + '" stop-opacity="0.22"/><stop offset="1" stop-color="' + MARINE + '" stop-opacity="0"/></linearGradient></defs>' +
       '<rect x="0" y="' + DIVY + '" width="' + W + '" height="12" fill="url(#wxdiv)"/>' +
       '<rect x="0" y="' + DIVY + '" width="' + W + '" height="2" fill="' + MARINE + '"/>';
@@ -249,14 +258,14 @@ function drawWeek(d) {
   for (var g = 0; g <= 3; g++) {
     var gy = T + ihU - (g / 3) * ihU;
     out += '<line x1="0" x2="' + W + '" y1="' + gy + '" y2="' + gy + '" stroke="var(--line)" stroke-width="1"/>';
-    axL += '<text x="21" y="' + (gy + 3) + '" text-anchor="end" font-size="9" fill="var(--wind)" ' + mono + '>' + Math.round(g / 3 * WMAX) + '</text>';
-    axR += '<text x="4" y="' + (gy + 3) + '" text-anchor="start" font-size="9" fill="' + GOLD + '" ' + mono + '>' + (TMIN + g * TSTEP) + '°</text>';
+    axL += '<text x="21" y="' + (gy + 4) + '" text-anchor="end" font-size="11" fill="var(--wind)" ' + mono + '>' + Math.round(g / 3 * WMAX) + '</text>';
+    axR += '<text x="4" y="' + (gy + 4) + '" text-anchor="start" font-size="11" fill="' + GOLD + '" ' + mono + '>' + (TMIN + g * TSTEP) + '°</text>';
   }
   for (g = 0; g <= 2; g++) {
     gy = T + ih - (g / 2) * RH;
     out += '<line x1="0" x2="' + W + '" y1="' + gy + '" y2="' + gy + '" stroke="var(--line)" stroke-width="1"/>';
-    axR += '<text x="4" y="' + (gy + 3) + '" text-anchor="start" font-size="9" fill="' + RC + '" ' + mono + '>' + Math.round(g / 2 * RMAX) + '%</text>';
-    axL += '<text x="21" y="' + (gy + 3) + '" text-anchor="end" font-size="9" fill="' + MARINE + '" ' + mono + '>' + (g ? g / 2 * MMAX : 'mm') + '</text>';
+    axR += '<text x="4" y="' + (gy + 4) + '" text-anchor="start" font-size="11" fill="' + RC + '" ' + mono + '>' + Math.round(g / 2 * RMAX) + '%</text>';
+    axL += '<text x="21" y="' + (gy + 4) + '" text-anchor="end" font-size="11" fill="' + MARINE + '" ' + mono + '>' + (g ? g / 2 * MMAX : 'mm') + '</text>';
   }
   var wp = WIND.map(function (v, i) { return [x(i), yW(v)]; });
   var gp = GUST.map(function (v, i) { return [x(i), yW(v)]; });
@@ -276,7 +285,7 @@ function drawWeek(d) {
   out += '<clipPath id="wxstrong"><rect x="0" y="' + T + '" width="' + W + '" height="' + Math.max(0, yS - T) + '"/></clipPath>';
   out += '<path clip-path="url(#wxstrong)" d="' + curve(gp) + curve(wp.slice().reverse(), true) + ' Z" fill="url(#wxg)" stroke="none"/>';
   if (yS >= T) out += '<line x1="0" x2="' + W + '" y1="' + yS + '" y2="' + yS + '" stroke="var(--wind)" stroke-width="0.9" stroke-dasharray="1 3" stroke-opacity="0.8"/>';
-  if (yS >= T) axL += '<text x="21" y="' + (yS + 3) + '" text-anchor="end" font-size="8" fill="var(--wind)" ' + mono + '>' + STRONG + '</text>';
+  if (yS >= T) axL += '<text x="21" y="' + (yS + 3.5) + '" text-anchor="end" font-size="10" fill="var(--wind)" ' + mono + '>' + STRONG + '</text>';
   // gold band between the temperature curve and the feels-like curve, darker where it rises above the WARM level
   var fp = FEEL.map(function (v, i) { return [x(i), yT(v)]; }), yH = yT(WARM), feelBand = curve(tp) + curve(fp.slice().reverse(), true) + ' Z';
   out += '<path d="' + feelBand + '" fill="' + GOLD + '" fill-opacity="0.18" stroke="none" clip-path="url(#wxup)"/>';
@@ -288,7 +297,7 @@ function drawWeek(d) {
     out += '<path clip-path="url(#wxwarm)" d="' + feelBand + '" fill="url(#wxwarmg)" stroke="none"/>';
     if (yH <= T + ihU) {
       out += '<line x1="0" x2="' + W + '" y1="' + yH + '" y2="' + yH + '" stroke="' + GOLD + '" stroke-width="0.9" stroke-dasharray="1 3" stroke-opacity="0.9"/>';
-      axR += '<text x="4" y="' + (yH + 3) + '" text-anchor="start" font-size="8" fill="' + GOLD + '" ' + mono + '>' + WARM + '°</text>';
+      axR += '<text x="4" y="' + (yH + 3.5) + '" text-anchor="start" font-size="10" fill="' + GOLD + '" ' + mono + '>' + WARM + '°</text>';
     }
   }
   // rain chance filled from the 0 axis so any rain is obvious
@@ -363,7 +372,7 @@ function drawWeek(d) {
         ? '<text x="' + ix + '" y="26" text-anchor="middle" font-size="24">' + ICON[pick][0] + '</text>'
         : '<image href="' + ICON_BASE + ICON[pick][1] + '.svg" x="' + (ix - sz / 2) + '" y="' + (14 - sz / 2) + '" width="' + sz + '" height="' + sz + '"/>';
     }
-    if (h % HK === 0) out += '<text x="' + x(i) + '" y="' + (H - 5) + '" text-anchor="middle" font-size="8" fill="var(--muted)" ' + mono + '>' + (h < 10 ? '0' + h : h) + '</text>';
+    if (h % HK === 0) out += '<text x="' + x(i) + '" y="' + (H - 5) + '" text-anchor="middle" font-size="9.5" fill="var(--muted)" ' + mono + '>' + (h < 10 ? '0' + h : h) + '</text>';
   }
   drawDayTemps();
   // current-time marker with a small tag of the conditions right now (interpolated between the hourly values)
@@ -445,13 +454,13 @@ function drawCross() {
   // what the level line reads on each axis: wind on the left and temperature on the right; in the rain panel, mm on the left and chance on the right
   function chip(xa, w, txt, col) {
     return '<rect x="' + xa + '" y="' + (cy - 6.5) + '" width="' + w + '" height="13" rx="2" fill="var(--surface)" stroke="' + col + '" stroke-width="0.7"/>' +
-      '<text x="' + (xa + w / 2) + '" y="' + (cy + 3.2) + '" text-anchor="middle" font-size="9" font-weight="700" fill="' + col + '" ' + mono + '>' + txt + '</text>';
+      '<text x="' + (xa + w / 2) + '" y="' + (cy + 3.7) + '" text-anchor="middle" font-size="10.5" font-weight="700" fill="' + col + '" ' + mono + '>' + txt + '</text>';
   }
   var f = (v.T + v.ihU - cy) / v.ihU;
-  gl.innerHTML = f >= 0 ? chip(3, 22, Math.round(f * v.WMAX), 'var(--wind)')
+  gl.innerHTML = f >= 0 ? chip(1, 24, Math.round(f * v.WMAX), 'var(--wind)')
     : cy >= v.RTOP ? chip(1, 24, ((bot - cy) / (bot - v.RTOP) * v.MMAX).toFixed(1), v.MARINE) : '';
-  gr.innerHTML = f >= 0 ? chip(1, 28, Math.round(v.TMIN + f * (v.TMAX - v.TMIN)) + '°', v.GOLD)
-    : cy >= v.RTOP ? chip(1, 28, Math.round((bot - cy) / (bot - v.RTOP) * v.RMAX) + '%', v.RC) : '';
+  gr.innerHTML = f >= 0 ? chip(1, 31, Math.round(v.TMIN + f * (v.TMAX - v.TMIN)) + '°', v.GOLD)
+    : cy >= v.RTOP ? chip(1, 31, Math.round((bot - cy) / (bot - v.RTOP) * v.RMAX) + '%', v.RC) : '';
 }
 // WMO weather code -> [emoji, Meteocons icon name]
 function icon(code, isDay) {
