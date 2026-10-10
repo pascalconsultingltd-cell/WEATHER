@@ -97,12 +97,13 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = 36;              // hours across the screen: 36 when the app opens, then whatever the buttons on top set (0 = the whole week)
-var BUILD = '2026-10-10m';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-10n';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
 var STRONG = 25;                 // km/h: the wind/gust band is drawn darker above this level
 var ARROW2 = 30, ARROW3 = 45;    // km/h gust: wind arrows get a double head from ARROW2 and a triple head from ARROW3
+var PAST_HOURS = 2;              // hours before now that stay on the chart (never earlier than 00:00 today)
 var REFRESH_MIN = 10;            // re-fetch interval while the page is open
 var RAIN_STYLE = 'gradient';     // rain fill: 'gradient' (blue fade), 'bars' (one bar per hour), 'drops' (grey with streaks)
 var ICON_SET = 'meteocons';      // 'meteocons' (drawn icons loaded from jsDelivr) or 'emoji'
@@ -119,12 +120,12 @@ function drawWeek(d) {
   var WIND = d.WIND, GUST = d.GUST, RAIN = d.RAIN, MM = d.MM, TEMP = d.TEMP, FEEL = d.FEEL, DIR = d.DIR, ICON = d.ICON;
   var chartEl = document.getElementById('chart'), AL = 26, AR = 33;
   PLOTW = chartEl.clientWidth - (AL + AR) * ZOOM;
-  if (!USER_ZOOM) PXH = PLOTW / (FIT_HOURS || WIND.length - Math.floor(d.NOW));
+  if (!USER_ZOOM) PXH = PLOTW / (FIT_HOURS || WIND.length - Math.max(0, Math.floor(d.NOW) - PAST_HOURS));
   [].forEach.call(document.querySelectorAll('#zoomsel button'), function (b) { b.className = !USER_ZOOM && +b.getAttribute('data-h') === FIT_HOURS ? 'on' : ''; });
   var n = WIND.length, step = PXH / ZOOM, W = n * step, H = Math.max(200, Math.floor((chartEl.clientHeight - 26) / ZOOM)), T = 38, B = 18, ih = H - T - B;
   // two panels: wind and temperature on top (height ihU), rain chance below (height RH, top edge at RTOP)
   var RH = Math.round(ih * RAIN_SPLIT), ihU = ih - RH - 23, RTOP = T + ih - RH;
-  var H0 = Math.floor(d.NOW), X0 = H0 * step;
+  var H0 = Math.max(0, Math.floor(d.NOW) - PAST_HOURS), X0 = H0 * step;   // first hour on the chart: a little before now
   // how often things are drawn, so they never overlap when the time axis is squeezed
   function every(list, min) { for (var q = 0; q < list.length - 1 && list[q] * step < min; q++); return list[q]; }
   var IK = every([1, 2, 3, 4, 6, 8, 12, 24], 34), HK = every([1, 2, 3, 6, 12], 14), AK = every([1, 2, 3, 4, 6, 8, 12], 12);   // sky icons, hour labels, wind arrows
@@ -217,7 +218,7 @@ function drawWeek(d) {
     var r = step * 24 < 50 ? 7 : 10;
     for (var k = -1; k < d.SUN.length; k++) {
       var a = k < 0 ? -0.5 : k * 24 + d.SUN[k][1], b = k + 1 < d.SUN.length ? (k + 1) * 24 + d.SUN[k + 1][0] : n - 0.5;
-      a = Math.max(a, Math.floor(d.NOW) - 0.5);                      // only the part of the night still on the chart
+      a = Math.max(a, H0 - 0.5);                      // only the part of the night still on the chart
       if (b - a < 3) continue;
       var t = (a + b) / 2, m = moon(d.T0 + t * 3600000), cx = xt(t), cy = T + 17;
       var label = ((b - a) * step < 95 ? '' : m.name + ' ') + Math.round(m.lit * 100) + '%';   // no room for the name when squeezed
@@ -235,7 +236,7 @@ function drawWeek(d) {
   function drawDayTemps() {
     var cy = T + ihU / 2, SUNNY = { 'clear-day': 1, 'partly-cloudy-day': 1, 'overcast-day': 0.5 };   // how sunny each sky icon counts
     d.SUN.forEach(function (s, k) {
-      var a = Math.max(k * 24 + s[0], Math.floor(d.NOW) - 0.5), b = k * 24 + s[1];   // daylight still on the chart
+      var a = Math.max(k * 24 + s[0], H0 - 0.5), b = k * 24 + s[1];   // daylight still on the chart
       if (b - a < 2) return;
       var t = TEMP.slice(k * 24, k * 24 + 24), cx = xt((a + b) / 2), score = 0, hrs = 0;
       for (var i = k * 24 + Math.ceil(s[0]); i <= k * 24 + Math.floor(s[1]); i++) { score += SUNNY[ICON[i][1]] || 0; hrs++; }
@@ -397,7 +398,7 @@ function drawWeek(d) {
   ], wet = [   // bottom tag, in the rain panel
     // the night in progress (until sunrise) or the coming one (tonight's sunset to tomorrow's sunrise)
     ['var(--night)', d.NOW < d.SUN[0][0] ? 'Night until ' + fmt(d.SUN[0][0]) : 'Night ' + fmt(d.SUN[0][1]) + '–' + fmt(d.SUN[1][0])],
-    [RC, 'Rain ' + at(RAIN) + '%' + (MM[H0] ? ' · ' + MM[H0] + ' mm' : '')]
+    [RC, 'Rain ' + at(RAIN) + '%' + (MM[Math.floor(d.NOW)] ? ' · ' + MM[Math.floor(d.NOW)] + ' mm' : '')]
   ];
   // latest published Lido water temperature and the day it was measured
   // (the Lido is published about weekly; "~" is today's estimate worked out from the air temperatures since then)
