@@ -1,5 +1,5 @@
 {
-  "name": "Hampstead Heath Lido Meteo",
+  "name": "Lido Meteo",
   "short_name": "Lido Meteo",
   "description": "Hourly wind, rain and temperature for the week ahead",
   "start_url": "./",
