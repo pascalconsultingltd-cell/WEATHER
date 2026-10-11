@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Weather</string>
+    <string name="app_name">Hampstead Heath Lido Meteo</string>
     <string name="widget_wind">Wind now</string>
     <string name="widget_temp">Weather now</string>
     <string name="widget_lido">Lido temperature</string>
