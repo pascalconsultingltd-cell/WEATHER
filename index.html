@@ -103,7 +103,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = 36;              // hours across the screen: 36 when the app opens, then whatever the buttons on top set (0 = the whole week)
-var BUILD = '2026-10-12l';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-12m';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -115,7 +115,8 @@ var REFRESH_MIN = 10;            // re-fetch interval while the page is open
 var RAIN_STYLE = 'gradient';     // rain fill: 'gradient' (blue fade), 'bars' (one bar per hour), 'drops' (grey with streaks)
 var ICON_SET = 'meteocons';      // 'meteocons' (drawn icons loaded from jsDelivr) or 'emoji'
 // Hampstead Heath Lido water temperature, saved to the repo by a scheduled job (the City of London publishes it about weekly)
-var LIDO_URL = 'https://raw.githubusercontent.com/pascalconsultingltd-cell/WEATHER/main/lido.json', LIDO = null;
+// (read from the site's own copy, always revalidated: the raw.githubusercontent.com copy can be 5 minutes stale; that one serves a page opened from a file)
+var LIDO_URL = location.protocol.indexOf('http') === 0 ? 'lido.json' : 'https://raw.githubusercontent.com/pascalconsultingltd-cell/WEATHER/main/lido.json', LIDO = null;
 var ICON_BASE = 'https://cdn.jsdelivr.net/gh/basmilius/weather-icons@dev/production/fill/svg-static/';
 var PXH = 0, USER_ZOOM = false, PLOTW = 0;   // screen px per hour (set to fit FIT_HOURS until the user pinches), width of the plot on screen
 var VS = 1, VO = 0;                          // vertical stretch and shift of the wind and temperature scales, set by sliding on an axis (1 and 0 = automatic)
@@ -592,7 +593,7 @@ function checkBuild() {
 }
 function load() {
   checkBuild();
-  fetch(LIDO_URL).then(function (r) { return r.ok ? r.json() : null; })
+  fetch(LIDO_URL, { cache: 'no-cache' }).then(function (r) { return r.ok ? r.json() : null; })
     .then(function (v) { if (v) { LIDO = v; if (lastData) render(lastData); } })
     .catch(function () {});   // the chart works without it
   var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + LAT + '&longitude=' + LON +
