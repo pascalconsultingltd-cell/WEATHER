@@ -103,7 +103,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = 36;              // hours across the screen: 36 when the app opens, then whatever the buttons on top set (0 = the whole week)
-var BUILD = '2026-10-12e';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-12f';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -381,13 +381,14 @@ function drawWeek(d) {
       out += '<text x="' + x(k * 24 + 20) + '" y="' + ly + '" fill="var(--lido)" ' + BIG + ' style="font-size:' + fs + 'px">' + Math.floor(v + 1e-6) + '°</text>';
     });
   }
-  // wind-direction arrows riding just above the gust curve
+  // wind-direction arrows riding just above the gust curve, and again just above the rain curve
   GUST.forEach(function (gv, i) {
     if (i % AK || i < H0) return;
-    var ay = Math.max(T + 8, yW(gv) - 11), rot = DIR[i] + 180;
-    if (ay > T + ihU - 4) return;   // the gust curve is below the panel here
     var heads = gv >= ARROW3 ? 3 : gv >= ARROW2 ? 2 : 1, head = [' M-3,-1.5 L0,-5.5 L3,-1.5', ' M-3,1.7 L0,-2.3 L3,1.7', ' M-3,4.9 L0,0.9 L3,4.9'];
-    out += '<g transform="translate(' + x(i) + ',' + ay + ') rotate(' + rot + ')" stroke="#06501f" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M0,' + (heads > 2 ? 6.5 : 5) + ' L0,-5' + head.slice(0, heads).join('') + '"/></g>';
+    [Math.max(T + 8, yW(gv) - 11), Math.min(T + ih - 8, Math.max(RTOP + 8, rp[i][1] - 11))].forEach(function (ay, rain) {
+      if (!rain && ay > T + ihU - 4) return;   // the gust curve is below the panel here
+      out += '<g transform="translate(' + x(i) + ',' + ay + ') rotate(' + (DIR[i] + 180) + ')" stroke="#06501f" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M0,' + (heads > 2 ? 6.5 : 5) + ' L0,-5' + head.slice(0, heads).join('') + '"/></g>';
+    });
   });
   // per-day labels: peak gust (the temperature highs and lows are in the big fraction)
   function fmt(t) { var h = Math.floor(t), m = Math.round((t - h) * 60); if (m === 60) { h++; m = 0; } return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m; }
