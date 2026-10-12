@@ -103,7 +103,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = 36;              // hours across the screen: 36 when the app opens, then whatever the buttons on top set (0 = the whole week)
-var BUILD = '2026-10-12k';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-12l';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -430,6 +430,21 @@ function drawWeek(d) {
   }
   if (d.NOW - d.TODAY * 24 < d.SUN[d.TODAY][0]) wet.unshift(['var(--night)', 'Night until ' + fmt(d.SUN[d.TODAY][0])]);
   rows = rows.concat(wet);
+  // After the last day, a column of Lido practical details from lido.json: open or closed, today's hours, sauna sessions
+  var INFO = LIDO && LIDO.hours ? 215 : 0;
+  if (INFO) {
+    var cap = function (t) { return t.charAt(0).toUpperCase() + t.slice(1); }, one = LIDO.hours.sessions.length === 1 && LIDO.hours.sessions[0];
+    var info = [[17, 700, 'var(--lido)', 'Lido'], [12, 500, 'var(--fg)', cap((LIDO.status || '').replace(/^we are /i, ''))],
+      [10.5, 400, 'var(--muted)', LIDO.hours.season + ' hours until ' + new Date(LIDO.hours.until + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })]];
+    LIDO.hours.sessions.forEach(function (q) { info.push([12, 500, 'var(--fg)', q.name ? q.name + ' ' + q.open + '–' + q.last : 'Open ' + q.open + ' · last entry ' + q.last]); });
+    if (one) info.push([12, 500, 'var(--fg)', 'Out of water by ' + one.out]);
+    if (LIDO.sauna) info.push([17, 700, 'var(--lido)', 'Sauna'], [12, 500, 'var(--fg)', cap(LIDO.sauna.replace(/^sauna /i, '').replace(/, /g, ' '))]);
+    out += '<line x1="' + W + '" x2="' + W + '" y1="0" y2="' + H + '" stroke="var(--line)" stroke-width="1"/>';
+    var iy = T - 2;
+    info.forEach(function (r) {
+      out += '<text x="' + (W + 10) + '" y="' + (iy += r[0] === 17 ? 28 : 18) + '" font-size="' + r[0] + '" font-weight="' + r[1] + '" fill="' + r[2] + '" ' + mono + '>' + r[3] + '</text>';
+    });
+  }
   // The chart starts at the current hour (everything earlier is cropped off) and is as tall as the screen.
   function size(id, vx, vw) {
     var el = document.getElementById(id);
@@ -438,7 +453,7 @@ function drawWeek(d) {
     el.setAttribute('viewBox', vx + ' 0 ' + vw + ' ' + H);
     return el;
   }
-  size('wxchart', X0, W - X0).innerHTML = out + '<g id="wxcross"></g>';
+  size('wxchart', X0, W - X0 + INFO).innerHTML = out + '<g id="wxcross"></g>';
   size('axL', 0, AL).innerHTML = axL + '<g id="axLcross"></g>';
   size('axR', 0, AR).innerHTML = axR + '<g id="axRcross"></g>';
   VIEW = { d: d, n: n, step: step, W: W, T: T, ih: ih, ihU: ihU, RTOP: RTOP, H0: H0, X0: X0, x: x, yW: yW, yT: yT, yR: yR,
@@ -458,7 +473,7 @@ function drawWeek(d) {
     if (hours <= 0) return '';
     var txt = k !== d.TODAY ? (w >= 150 ? day.label : w >= 66 ? day.short : w >= 34 ? day.short.slice(0, 3) : '') : w >= 210 ? 'Today · ' + day.label : w >= 60 ? 'Today' : '';   // whatever fits
     return '<div class="day' + (day.we ? ' we' : '') + (w < 66 ? ' tight' : '') + '" style="width:' + w + 'px"><b>' + txt + '</b></div>';   // weekend banner in yellow
-  }).join('');
+  }).join('') + (INFO ? '<div class="day" style="width:' + INFO * ZOOM + 'px"><b>Lido info</b></div>' : '');
   // on opening, the left edge is a little before now; the earlier hours are there to drag back to
   if (!HOMED) { HOMED = true; document.querySelector('.scroll').scrollLeft = (HOME - H0) * PXH; }
 }
