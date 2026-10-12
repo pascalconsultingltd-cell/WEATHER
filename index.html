@@ -103,7 +103,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = 36;              // hours across the screen: 36 when the app opens, then whatever the buttons on top set (0 = the whole week)
-var BUILD = '2026-10-12h';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-12i';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -130,7 +130,7 @@ function drawWeek(d) {
   PLOTW = chartEl.clientWidth - (AL + AR) * ZOOM;
   if (!USER_ZOOM) PXH = PLOTW / (FIT_HOURS || WIND.length - Math.max(0, Math.floor(d.NOW) - PAST_HOURS));   // 0 = from the opening position to the end of the week
   [].forEach.call(document.querySelectorAll('#zoomsel button'), function (b) { b.className = !USER_ZOOM && +b.getAttribute('data-h') === FIT_HOURS ? 'on' : ''; });
-  var n = WIND.length, step = PXH / ZOOM, W = n * step, H = Math.max(200, Math.floor((chartEl.clientHeight - 26) / ZOOM)), T = 38, B = 18, ih = H - T - B;
+  var n = WIND.length, step = PXH / ZOOM, W = n * step, H = Math.max(200, Math.floor((chartEl.clientHeight - 26) / ZOOM)), T = 50, B = 18, ih = H - T - B;
   // two panels: wind and temperature on top (height ihU), rain chance below (height RH, top edge at RTOP)
   var RH = Math.round(ih * RAIN_SPLIT), ihU = ih - RH - 23, RTOP = T + ih - RH;
   var HOME = Math.max(0, Math.floor(d.NOW) - PAST_HOURS), H0 = Math.max(0, Math.floor(d.NOW) - BACK_HOURS), X0 = H0 * step;   // hour at the left edge on opening; first hour drawn
@@ -239,12 +239,12 @@ function drawWeek(d) {
   var TAGW = 196;   // width of the now tag
   // moon phase, drawn in the sky in the middle of each night
   function drawMoons() {
-    var r = step * 24 < 50 ? 7 : 10;
+    var r = step * 24 < 50 ? 9 : 14;
     for (var k = -1; k < d.SUN.length; k++) {
       var a = k < 0 ? -0.5 : k * 24 + d.SUN[k][1], b = k + 1 < d.SUN.length ? (k + 1) * 24 + d.SUN[k + 1][0] : n - 0.5;
       a = Math.max(a, H0 - 0.5);                      // only the part of the night still on the chart
       if (b - a < 3) continue;
-      var t = (a + b) / 2, m = moon(d.T0 + t * 3600000), cx = xt(t), cy = T + 17;
+      var t = (a + b) / 2, m = moon(d.T0 + t * 3600000), cx = xt(t), cy = T + r + 7;
       var label = ((b - a) * step < 95 ? '' : m.name + ' ') + Math.round(m.lit * 100) + '%';   // no room for the name when squeezed
       cx = Math.max(cx, X0 + Math.max(r, label.length * 2.5) + 3);   // kept whole at the left edge
       var p = m.phase < 0.5 ? m.phase : 1 - m.phase;                 // mirrored for the waning half
@@ -386,7 +386,7 @@ function drawWeek(d) {
     // sunrise / sunset times, centred on the day/night boundary just below the sky icons
     s.forEach(function (v) {
       if (xt(a + v) < X0 + 13 || (s[1] - s[0]) * step < 30) return;   // would be cut by the left edge, or the two would collide
-      out += '<text x="' + xt(a + v) + '" y="36" text-anchor="middle" font-size="8.5" font-weight="500" fill="var(--fg)" ' + mono + '>' + fmt(v) + '</text>';
+      out += '<text x="' + xt(a + v) + '" y="' + (T - 2) + '" text-anchor="middle" font-size="8.5" font-weight="500" fill="var(--fg)" ' + mono + '>' + fmt(v) + '</text>';
     });
   });
   for (var i = 0; i < n; i++) {
@@ -395,11 +395,11 @@ function drawWeek(d) {
     // or more they follow the clock instead and show the sky of the hour nearest 13:00
     var gEnd = IK < 6 ? i + IK : Math.min(n, (Math.floor(i / IK) + 1) * IK);
     if (i >= H0 && (IK < 6 ? (i - H0) % IK === 0 : i === H0 || i % IK === 0) && (gEnd - i) * step >= 20) {
-      var pick = i, ix = (i + gEnd) / 2 * step, sz = Math.min(38, IK * step + 6);
+      var pick = i, ix = (i + gEnd) / 2 * step, sz = Math.min(54, IK * step + 14);
       if (IK >= 6) for (var q = i; q < gEnd; q++) if (Math.abs(q % 24 - 13) < Math.abs(pick % 24 - 13)) pick = q;
       out += ICON_SET === 'emoji'
-        ? '<text x="' + ix + '" y="26" text-anchor="middle" font-size="24">' + ICON[pick][0] + '</text>'
-        : '<image href="' + ICON_BASE + ICON[pick][1] + '.svg" x="' + (ix - sz / 2) + '" y="' + (14 - sz / 2) + '" width="' + sz + '" height="' + sz + '"/>';
+        ? '<text x="' + ix + '" y="34" text-anchor="middle" font-size="32">' + ICON[pick][0] + '</text>'
+        : '<image href="' + ICON_BASE + ICON[pick][1] + '.svg" x="' + (ix - sz / 2) + '" y="' + (20 - sz / 2) + '" width="' + sz + '" height="' + sz + '"/>';
     }
     if (h % HK === 0) out += '<text x="' + x(i) + '" y="' + (H - 5) + '" text-anchor="middle" font-size="9.5" fill="var(--muted)" ' + mono + '>' + (h < 10 ? '0' + h : h) + '</text>';
   }
