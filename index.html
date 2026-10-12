@@ -76,7 +76,7 @@ html, body { height:100%; overflow:hidden; background:var(--surface); }
 /* title of the rain panel, pinned to its top-left corner while the chart scrolls underneath */
 .rainlab { position:fixed; z-index:1; pointer-events:none; white-space:nowrap; color:#0b3d91; font:700 14px var(--font-display); text-shadow:0 0 3px var(--surface), 0 0 3px var(--surface); }
 .rainlab small { margin-left:5px; color:var(--muted); font:400 10px var(--font-data); }
-/* the two tags of current conditions, pinned to the left of the plot while the chart scrolls underneath */
+/* the tag of current conditions, pinned in the rain panel while the chart scrolls underneath */
 .nowtag { position:fixed; z-index:1; pointer-events:none; box-sizing:border-box; padding:3px 9px 4px; border:1px solid rgba(211,221,228,0.7); border-radius:6px;
   background:rgba(255,255,255,0.3); white-space:nowrap; overflow:hidden; font-family:"DM Mono", monospace; font-weight:500;
   text-shadow:0 0 2px var(--surface), 0 0 2px var(--surface), 0 0 3px var(--surface); }
@@ -90,8 +90,7 @@ html, body { height:100%; overflow:hidden; background:var(--surface); }
 </style></head><body>
 <p class="status" id="status"></p>
 <div class="rainlab" id="rainlab"></div>
-<div class="nowtag" id="tagtop"></div>
-<div class="nowtag" id="tagwet"></div>
+<div class="nowtag" id="nowtag"></div>
 <div class="zoomsel" id="zoomsel"><button data-h="36">1.5d</button><button data-h="72">3d</button><button data-h="0">7d</button></div>
 <div class="chart" id="chart">
   <svg id="axL"></svg>
@@ -104,7 +103,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = 36;              // hours across the screen: 36 when the app opens, then whatever the buttons on top set (0 = the whole week)
-var BUILD = '2026-10-11d';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-12a';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -161,6 +160,9 @@ function drawWeek(d) {
   var GOLD = '#e0a800', GREY = '#7d8993';
   var RC = RAIN_STYLE === 'drops' ? GREY : 'var(--rain)';   // rain colour
   var mono = 'font-family="DM Mono, monospace"';
+  var FS = Math.max(12, Math.min(24, step * 24 * 0.42));   // big figures (day fraction, highs and lows, Lido): shrink to fit a narrow day
+  var HALO = 'stroke="var(--surface)" stroke-opacity="0.75" stroke-linejoin="round" stroke-linecap="round"', BIG = 'text-anchor="middle" font-size="' + FS + '" font-weight="700" stroke-width="4" paint-order="stroke" ' + HALO + ' ' + mono;
+  var WIDE = step * 24 >= 130;   // a day is wide enough for the big figures beside its fraction
   function x(i) { return (i + 0.5) * step; }
   // Sliding on an axis stretches the top panel: every height in it goes through vy(), wind and temperature alike.
   function vy(y) { return VS * y + VO; }
@@ -253,21 +255,20 @@ function drawWeek(d) {
       out += '<text x="' + cx + '" y="' + (cy + r + 10) + '" text-anchor="middle" font-size="8" fill="var(--muted)" ' + mono + '>' + label + '</text>';
     }
   }
-  // day's max over min temperature as a big fraction in the middle of each daytime:
+  // day's max over min temperature as a big fraction in the middle of each daytime, at the height of the day's mean temperature:
   // gold when the daylight hours are mostly sunny, grey when mostly cloudy
   function drawDayTemps() {
-    var cy = T + ihU / 2, SUNNY = { 'clear-day': 1, 'partly-cloudy-day': 1, 'overcast-day': 0.5 };   // how sunny each sky icon counts
+    var z = FS / 24, SUNNY = { 'clear-day': 1, 'partly-cloudy-day': 1, 'overcast-day': 0.5 };   // how sunny each sky icon counts
     d.SUN.forEach(function (s, k) {
       var a = Math.max(k * 24 + s[0], H0 - 0.5), b = k * 24 + s[1];   // daylight still on the chart
       if (b - a < 2) return;
       var t = TEMP.slice(k * 24, k * 24 + 24), cx = xt((a + b) / 2), score = 0, hrs = 0;
+      var cy = Math.min(T + ihU - 25 * z - 3, Math.max(yT(Math.max.apply(null, t)) + 7 * z + FS * 0.75, yT(t.reduce(function (p, v) { return p + v; }, 0) / t.length)));   // never over the high's own figure
       for (var i = k * 24 + Math.ceil(s[0]); i <= k * 24 + Math.floor(s[1]); i++) { score += SUNNY[ICON[i][1]] || 0; hrs++; }
       var col = hrs && score / hrs >= 0.5 ? GOLD : GREY;
-      var halo = 'stroke="var(--surface)" stroke-opacity="0.75" stroke-linejoin="round" stroke-linecap="round"';
-      var fs = Math.max(12, Math.min(24, step * 24 * 0.42)), z = fs / 24;   // shrinks to fit a narrow day
-      var att = 'text-anchor="middle" font-size="' + fs + '" font-weight="700" fill="' + col + '" stroke-width="4" paint-order="stroke" ' + halo + ' ' + mono;
+      var att = 'fill="' + col + '" ' + BIG;
       out += '<text x="' + cx + '" y="' + (cy - 7 * z) + '" ' + att + '>' + Math.max.apply(null, t) + '°</text>';
-      out += '<line x1="' + (cx - 21 * z) + '" x2="' + (cx + 21 * z) + '" y1="' + cy + '" y2="' + cy + '" stroke-width="6" ' + halo + '/>';
+      out += '<line x1="' + (cx - 21 * z) + '" x2="' + (cx + 21 * z) + '" y1="' + cy + '" y2="' + cy + '" stroke-width="6" ' + HALO + '/>';
       out += '<line x1="' + (cx - 21 * z) + '" x2="' + (cx + 21 * z) + '" y1="' + cy + '" y2="' + cy + '" stroke="' + col + '" stroke-width="2.4" stroke-linecap="round"/>';
       out += '<text x="' + cx + '" y="' + (cy + 25 * z) + '" ' + att + '>' + Math.min.apply(null, t) + '°</text>';
     });
@@ -373,9 +374,9 @@ function drawWeek(d) {
     out += '<path d="' + curve(lp) + '" fill="none" stroke="var(--surface)" stroke-width="5.5" stroke-opacity="0.7" clip-path="url(#wxup)"/>';
     out += '<path d="' + curve(lp) + '" fill="none" stroke="var(--accent)" stroke-width="3.4" stroke-linecap="round" clip-path="url(#wxup)"/>';
     POOL.forEach(function (v, k) {
-      var ly = yT(v) - 6;
-      if (k < d.TODAY || step * 24 < 50 || ly < T + 9 || ly > T + ihU) return;
-      out += '<text x="' + x(k * 24 + 12) + '" y="' + ly + '" text-anchor="middle" font-size="9.5" font-weight="700" fill="var(--accent)" stroke="var(--surface)" stroke-width="2.5" stroke-opacity="0.75" paint-order="stroke" ' + mono + '>' + Math.floor(v + 1e-6) + '°</text>';
+      var ly = yT(v) - 7;
+      if (k < d.TODAY || step * 24 < 50 || ly < T + FS * 0.8 || ly > T + ihU) return;
+      out += '<text x="' + x(k * 24 + 20) + '" y="' + ly + '" fill="var(--accent)" ' + BIG + (WIDE ? '' : ' style="font-size:' + FS * 0.55 + 'px"') + '>' + Math.floor(v + 1e-6) + '°</text>';
     });
   }
   // wind-direction arrows riding just above the gust curve
@@ -388,10 +389,9 @@ function drawWeek(d) {
   });
   // per-day labels: peak gust, max and min temperature
   function put(i, y, txt, col, below) {
-    if (i < H0 || step * 24 < 50 || y < T - 1 || y > T + ihU + 1) return;   // already past; days too narrow (the big fraction says it); or stretched out of the panel
-    var ty = below ? y + 12 : y - 5;
-    ty = Math.min(T + ihU - 2, Math.max(T + 9, ty));
-    out += '<text x="' + x(i) + '" y="' + ty + '" text-anchor="middle" font-size="9" font-weight="500" fill="' + col + '" ' + mono + '>' + txt + '</text>';
+    if (i < H0 || !WIDE || y < T - 1 || y > T + ihU + 1) return;   // already past; days too narrow (the big fraction says it); or stretched out of the panel
+    var ty = Math.min(T + ihU - 2, Math.max(T + FS * 0.8, below ? y + FS * 0.8 + 3 : y - 6));
+    out += '<text x="' + x(i) + '" y="' + ty + '" fill="' + col + '" ' + BIG + '>' + txt + '</text>';
   }
   function fmt(t) { var h = Math.floor(t), m = Math.round((t - h) * 60); if (m === 60) { h++; m = 0; } return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m; }
   d.SUN.forEach(function (s, k) {
@@ -428,11 +428,11 @@ function drawWeek(d) {
   out += '<rect x="' + X0 + '" y="0" width="' + Math.max(0, nx - X0) + '" height="' + (T + ih) + '" fill="#6b7780" fill-opacity="0.16"/>';
   out += '<line x1="' + nx + '" x2="' + nx + '" y1="' + T + '" y2="' + (T + ih) + '" stroke="var(--fg)" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="3 3"/>';
   function at(arr) { var i = Math.floor(d.NOW), f = d.NOW - i, b = arr[Math.min(n - 1, i + 1)]; return Math.round(arr[i] + (b - arr[i]) * f); }
-  var rows = [   // top tag, pinned in the top-left corner of the plot
+  var rows = [   // the now tag, pinned in the rain panel
     ['var(--fg)', 'Now ' + fmt(d.NOW - d.TODAY * 24)],
     ['var(--wind)', 'Wind ' + at(WIND) + ' · gust ' + at(GUST)],
     [GOLD, 'Temp ' + at(TEMP) + '° · feels ' + at(FEEL) + '°']
-  ], wet = [   // bottom tag, in the rain panel
+  ], wet = [
     // the night in progress (until sunrise) or the coming one (tonight's sunset to tomorrow's sunrise)
     ['var(--night)', d.NOW - d.TODAY * 24 < d.SUN[d.TODAY][0] ? 'Night until ' + fmt(d.SUN[d.TODAY][0]) : 'Night ' + fmt(d.SUN[d.TODAY][1]) + '–' + fmt(d.SUN[d.TODAY + 1][0])],
     [RC, 'Rain ' + at(RAIN) + '%' + (MM[Math.floor(d.NOW)] ? ' · ' + MM[Math.floor(d.NOW)] + ' mm' : '')]
@@ -444,6 +444,7 @@ function drawWeek(d) {
     var est = LIDO.estimate != null && LIDO.estimate_date !== LIDO.date;
     rows.push(['var(--accent)', est ? 'Lido ~' + Math.floor(LIDO.estimate) + '° (' + LIDO.lido + '° ' + lidoDay + ')' : 'Lido ' + LIDO.lido + '° · ' + lidoDay]);
   }
+  rows = rows.concat(wet);
   // The chart starts at the current hour (everything earlier is cropped off) and is as tall as the screen.
   function size(id, vx, vw) {
     var el = document.getElementById(id);
@@ -462,12 +463,10 @@ function drawWeek(d) {
   lab.innerHTML = 'Rain<small>bars mm/h · line chance %</small>';
   lab.style.left = (box.right + 5) + 'px';
   lab.style.top = (box.top + (DIVY + 4) * ZOOM) + 'px';
-  // the two tags are pinned to the screen: the top one over the row of moons, the other in the rain panel under its title when there is room
-  [['tagtop', T + 4, rows], ['tagwet', Math.max(RTOP + 2, Math.min(RTOP + 14, T + ih - wet.length * 17 - 11)), wet]].forEach(function (t, k) {
-    var el = document.getElementById(t[0]);
-    el.innerHTML = t[2].map(function (r, i) { return '<div style="color:' + r[0] + (!k && !i ? ';font-weight:700' : '') + '">' + r[1] + '</div>'; }).join('');
-    el.style.cssText = 'left:' + (box.right + 4 * ZOOM) + 'px;top:' + (box.top + t[1] * ZOOM) + 'px;width:' + (TAGW * ZOOM) + 'px;font-size:' + (14 * ZOOM) + 'px;line-height:' + (17 * ZOOM) + 'px' + (!k && CROSS ? ';visibility:hidden' : '');
-  });
+  // the tag is pinned to the screen, in the rain panel under its title; where the panel is too short it reaches up from the bottom
+  var tag = document.getElementById('nowtag');
+  tag.innerHTML = rows.map(function (r, i) { return '<div style="color:' + r[0] + (i ? '' : ';font-weight:700') + '">' + r[1] + '</div>'; }).join('');
+  tag.style.cssText = 'left:' + (box.right + 4 * ZOOM) + 'px;top:' + (box.top + Math.min(RTOP + 14, T + ih - rows.length * 17 - 11) * ZOOM) + 'px;width:' + (TAGW * ZOOM) + 'px;font-size:' + (14 * ZOOM) + 'px;line-height:' + (17 * ZOOM) + 'px';
   // day banner above the plot; the name stays pinned at the left while that day is on screen
   document.getElementById('days').innerHTML = d.DAYS.map(function (day, k) {
     var hours = (k + 1) * 24 - Math.max(k * 24, H0), w = hours * PXH;   // the first day only runs from the first hour drawn
@@ -484,7 +483,6 @@ function drawCross() {
   var v = VIEW, g = document.getElementById('wxcross'), gl = document.getElementById('axLcross'), gr = document.getElementById('axRcross');
   if (!v || !g) return;
   if (CROSS && (CROSS.i < v.H0 || CROSS.i >= v.n)) CROSS = null;
-  document.getElementById('tagtop').style.visibility = CROSS ? 'hidden' : '';   // the crosshair's tag takes its place
   if (!CROSS) { g.innerHTML = gl.innerHTML = gr.innerHTML = ''; return; }
   var d = v.d, i = CROSS.i, cx = v.x(i), bot = v.T + v.ih, cy = Math.min(bot, Math.max(v.T, CROSS.y)), h = i % 24, mono = v.mono;
   var o = '<line x1="' + cx + '" x2="' + cx + '" y1="' + v.T + '" y2="' + bot + '" stroke="var(--fg)" stroke-width="1"/>' +
