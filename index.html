@@ -103,13 +103,13 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = 36;              // hours across the screen: 36 when the app opens, then whatever the buttons on top set (0 = the whole week)
-var BUILD = '2026-10-12i';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-12j';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
 var STRONG = 25;                 // km/h: the wind/gust band is drawn darker above this level
 var ARROW2 = 30, ARROW3 = 45;    // km/h gust: wind arrows get a double head from ARROW2 and a triple head from ARROW3
-var PAST_HOURS = 2;              // hours before now at the left edge when the app opens
+var PAST_HOURS = 6;              // hours before now at the left edge when the app opens (room for today's Lido figure)
 var BACK_HOURS = 16;             // how far before now the chart can be dragged back
 var REFRESH_MIN = 10;            // re-fetch interval while the page is open
 var RAIN_STYLE = 'gradient';     // rain fill: 'gradient' (blue fade), 'bars' (one bar per hour), 'drops' (grey with streaks)
@@ -162,7 +162,7 @@ function drawWeek(d) {
   var mono = 'font-family="DM Mono, monospace"';
   var FS = Math.max(12, Math.min(24, step * 24 * 0.42));   // big figures (day fraction, highs and lows, Lido): shrink to fit a narrow day
   var HALO = 'stroke="var(--surface)" stroke-opacity="0.75" stroke-linejoin="round" stroke-linecap="round"', BIG = 'text-anchor="middle" font-size="' + FS + '" font-weight="700" stroke-width="4" paint-order="stroke" ' + HALO + ' ' + mono;
-  var WIDE = step * 24 >= 130;   // a day is wide enough for the big figures beside its fraction
+  var WIDE = step * 24 >= 130, SFS = FS * (WIDE ? 0.8 : 0.55);   // a day is wide enough for big figures beside its fraction; size of the Lido and peak gust figures
   function x(i) { return (i + 0.5) * step; }
   // Sliding on an axis stretches the top panel: every height in it goes through vy(), wind and temperature alike.
   function vy(y) { return VS * y + VO; }
@@ -363,11 +363,6 @@ function drawWeek(d) {
     lp.unshift([0, lp[0][1]]); lp.push([W, lp[lp.length - 1][1]]);
     out += '<path d="' + curve(lp) + '" fill="none" stroke="var(--surface)" stroke-width="4.9" stroke-opacity="0.7" clip-path="url(#wxup)"/>';
     out += '<path d="' + curve(lp) + '" fill="none" stroke="var(--lido)" stroke-width="2.8" stroke-linecap="round" clip-path="url(#wxup)"/>';
-    POOL.forEach(function (v, k) {
-      var fs = FS * (WIDE ? 0.8 : 0.55), ly = yT(v) + fs * 0.8 + 5;   // under the line
-      if (k < d.TODAY || step * 24 < 50 || yT(v) < T || ly > T + ihU) return;
-      out += '<text x="' + x(k * 24 + 20) + '" y="' + ly + '" fill="var(--lido)" ' + BIG + ' style="font-size:' + fs + 'px">' + Math.floor(v + 1e-6) + '°</text>';
-    });
   }
   // wind-direction arrows riding just above the gust curve, and again just above the rain curve
   GUST.forEach(function (gv, i) {
@@ -382,7 +377,7 @@ function drawWeek(d) {
   function fmt(t) { var h = Math.floor(t), m = Math.round((t - h) * 60); if (m === 60) { h++; m = 0; } return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m; }
   d.SUN.forEach(function (s, k) {
     var a = k * 24, g = GUST.slice(a, a + 24), mg = Math.max.apply(null, g);
-    if (a + g.indexOf(mg) >= H0 && yW(mg) - 20 < T + ihU) out += '<text x="' + x(a + g.indexOf(mg)) + '" y="' + Math.max(T + 9, yW(mg) - 20) + '" text-anchor="middle" font-size="9" font-weight="500" fill="var(--wind)" ' + mono + '>' + mg + '</text>';
+    if (a + g.indexOf(mg) >= H0 && yW(mg) - 20 < T + ihU) out += '<text x="' + x(a + g.indexOf(mg)) + '" y="' + Math.max(T + SFS * 0.8, yW(mg) - 20) + '" fill="var(--wind)" ' + BIG + ' style="font-size:' + Math.max(9, SFS) + 'px">' + mg + '</text>';
     // sunrise / sunset times, centred on the day/night boundary just below the sky icons
     s.forEach(function (v) {
       if (xt(a + v) < X0 + 13 || (s[1] - s[0]) * step < 30) return;   // would be cut by the left edge, or the two would collide
@@ -410,6 +405,12 @@ function drawWeek(d) {
   out += '<rect x="' + X0 + '" y="0" width="' + Math.max(0, nx - X0) + '" height="' + (T + ih) + '" fill="var(--surface)" fill-opacity="0.5"/>';
   out += '<rect x="' + X0 + '" y="0" width="' + Math.max(0, nx - X0) + '" height="' + (T + ih) + '" fill="#6b7780" fill-opacity="0.16"/>';
   out += '<line x1="' + nx + '" x2="' + nx + '" y1="' + T + '" y2="' + (T + ih) + '" stroke="var(--fg)" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="3 3"/>';
+  // Lido figures under their line: today's just left of the now line (drawn over the wash), later days at 20:00
+  POOL.forEach(function (v, k) {
+    var ly = yT(v) + SFS * 0.8 + 5;
+    if (k < d.TODAY || step * 24 < 50 || yT(v) < T || ly > T + ihU) return;
+    out += '<text x="' + (k > d.TODAY ? x(k * 24 + 20) : nx - 3) + '" y="' + ly + '" fill="var(--lido)" ' + BIG + ' style="font-size:' + SFS + 'px' + (k > d.TODAY ? '' : ';text-anchor:end') + '">' + Math.floor(v + 1e-6) + '°</text>';
+  });
   function at(arr) { var i = Math.floor(d.NOW), f = d.NOW - i, b = arr[Math.min(n - 1, i + 1)]; return Math.round(arr[i] + (b - arr[i]) * f); }
   var rows = [   // the now tag, pinned in the rain panel
     ['var(--fg)', 'Now ' + fmt(d.NOW - d.TODAY * 24)],
