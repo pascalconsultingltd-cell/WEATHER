@@ -104,7 +104,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-13i';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-13j';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -368,11 +368,11 @@ function drawWeek(d) {
     out += '<path d="' + curve(lp) + '" fill="none" stroke="var(--surface)" stroke-width="4.9" stroke-opacity="0.7" clip-path="url(#wxup)"/>';
     out += '<path d="' + curve(lp) + '" fill="none" stroke="var(--lido)" stroke-width="2.8" stroke-linecap="round" clip-path="url(#wxup)"/>';
   }
-  // wind-direction arrows midway between the wind and gust curves, and again at half the height of the rain curve (never lower than 14 above the axis)
+  // wind-direction arrows midway between the wind and gust curves, and again in a row along the top of the rain panel, under its title
   GUST.forEach(function (gv, i) {
     if (i % AK || i < H0) return;
     var heads = gv >= ARROW3 ? 3 : gv >= ARROW2 ? 2 : 1, head = [' M-3,-1.5 L0,-5.5 L3,-1.5', ' M-3,1.7 L0,-2.3 L3,1.7', ' M-3,4.9 L0,0.9 L3,4.9'];
-    [Math.max(T + 8, (yW(gv) + yW(WIND[i])) / 2), Math.min(T + ih - 14, (rp[i][1] + T + ih) / 2)].forEach(function (ay, rain) {
+    [Math.max(T + 8, (yW(gv) + yW(WIND[i])) / 2), RTOP + 24].forEach(function (ay, rain) {
       if (!rain && ay > T + ihU - 4) return;   // the curves are below the panel here
       out += '<g transform="translate(' + x(i) + ',' + ay + ') rotate(' + (DIR[i] + 180) + ')" stroke="#06501f" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M0,' + (heads > 2 ? 6.5 : 5) + ' L0,-5' + head.slice(0, heads).join('') + '"/></g>';
     });
