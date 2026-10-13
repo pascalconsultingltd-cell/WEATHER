@@ -103,8 +103,8 @@ html, body { height:100%; overflow:hidden; background:var(--surface); }
 var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
-var FIT_HOURS = 36;              // hours across the screen: 36 when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-13f';       // change on every release: a page still running an older build reloads itself
+var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
+var BUILD = '2026-10-13g';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -490,7 +490,7 @@ function drawWeek(d) {
     return '<div class="day' + (day.we ? ' we' : '') + (w < 66 ? ' tight' : '') + '" style="width:' + w + 'px"><b>' + txt + '</b></div>';   // weekend banner in yellow
   }).join('') + (INFO ? '<div class="day" style="width:' + INFO * ZOOM + 'px"><b>Lido info</b></div>' : '');
   // on opening, the left edge is a little before now; the earlier hours are there to drag back to
-  if (!HOMED) { HOMED = true; document.querySelector('.scroll').scrollLeft = (HOME - H0) * PXH; }
+  if (!HOMED) { HOMED = true; document.querySelector('.scroll').scrollLeft = FIT_HOURS < 0 ? (d.NOW + 0.5 - H0) * PXH - NOW_ROOM * ZOOM : (HOME - H0) * PXH; }
 }
 
 // Crosshair: a line on one hour with that hour's values in a tag beside it, and a level line whose value is read on the axes.
