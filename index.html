@@ -76,7 +76,7 @@ html, body { height:100%; overflow:hidden; background:var(--surface); }
 /* title of the rain panel, pinned to its top-left corner while the chart scrolls underneath */
 .rainlab { position:fixed; z-index:1; pointer-events:none; white-space:nowrap; color:#0b3d91; font:700 14px var(--font-display); text-shadow:0 0 3px var(--surface), 0 0 3px var(--surface); }
 .rainlab small { margin-left:5px; color:var(--muted); font:400 10px var(--font-data); }
-/* the tag of current conditions, pinned in the rain panel while the chart scrolls underneath */
+/* the two tags pinned over the top panel while the chart scrolls underneath: time and night bottom left, Lido top right */
 .nowtag { position:fixed; z-index:1; pointer-events:none; box-sizing:border-box; padding:3px 9px 4px; border:1px solid rgba(211,221,228,0.7); border-radius:6px;
   background:rgba(255,255,255,0.3); white-space:nowrap; overflow:hidden; font-family:"DM Mono", monospace; font-weight:500;
   text-shadow:0 0 2px var(--surface), 0 0 2px var(--surface), 0 0 3px var(--surface); }
@@ -91,6 +91,7 @@ html, body { height:100%; overflow:hidden; background:var(--surface); }
 <p class="status" id="status"></p>
 <div class="rainlab" id="rainlab"></div>
 <div class="nowtag" id="nowtag"></div>
+<div class="nowtag" id="lidotag"></div>
 <div class="zoomsel" id="zoomsel"><button data-h="36">1.5d</button><button data-h="72">3d</button><button data-h="0">7d</button></div>
 <div class="chart" id="chart">
   <svg id="axL"></svg>
@@ -103,7 +104,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = 36;              // hours across the screen: 36 when the app opens, then whatever the buttons on top set (0 = the whole week)
-var BUILD = '2026-10-13c';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-13d';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -237,7 +238,6 @@ function drawWeek(d) {
       start = -1;
     }
   })();
-  var TAGW = 196;   // width of the now tag
   // moon phase, drawn in the sky in the middle of each night
   function drawMoons() {
     var r = step * 24 < 50 ? 9 : 14;
@@ -421,7 +421,7 @@ function drawWeek(d) {
     if (f[0] > T + SFS * 0.8 && f[0] < T + ihU) out += '<text x="' + (nx - 2) + '" y="' + f[0] + '" fill="' + f[1] + '" ' + BIG + ' style="font-size:' + SFS + 'px;text-anchor:end">' + f[2] + '</text>';
   });
   function at(arr) { var i = Math.floor(d.NOW), f = d.NOW - i, b = arr[Math.min(n - 1, i + 1)]; return Math.round(arr[i] + (b - arr[i]) * f); }
-  var rows = [   // the now tag, pinned in the rain panel: time, night, Lido (wind, temperature and rain are beside the now line)
+  var lido = [], rows = [   // the now tag: time and night (wind, temperature and rain are beside the now line); Lido has a tag of its own
     ['var(--fg)', 'Now ' + fmt(d.NOW - d.TODAY * 24)],
     // the coming night (tonight's sunset to tomorrow's sunrise); before sunrise, the night in progress goes above it
     ['var(--night)', 'Night ' + fmt(d.SUN[d.TODAY][1]) + '–' + fmt(d.SUN[d.TODAY + 1][0])]
@@ -432,10 +432,10 @@ function drawWeek(d) {
   if (LIDO && LIDO.lido != null) {
     var lidoDay = new Date(LIDO.date + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
     var est = LIDO.estimate != null && LIDO.estimate_date !== LIDO.date;
-    rows.push(['var(--lido)', est ? 'Lido ~' + Math.floor(LIDO.estimate) + '° (' + LIDO.lido + '° ' + lidoDay + ')' : 'Lido ' + LIDO.lido + '° · ' + lidoDay]);
+    lido.push(['var(--lido)', est ? 'Lido ~' + Math.floor(LIDO.estimate) + '° (' + LIDO.lido + '° ' + lidoDay + ')' : 'Lido ' + LIDO.lido + '° · ' + lidoDay]);
   }
-  // rain right now, left of the now line and below the tag: chance above its curve where there is room, then the amount in this hour
-  var ry = Math.max(RTOP + 25 + rows.length * 17 + SFS * 0.8, Math.min(yR(at(RAIN)) - 5, T + ih - SFS - 6));
+  // rain right now, left of the now line: chance above its curve where there is room, then the amount in this hour
+  var ry = Math.max(RTOP + 16 + SFS * 0.8, Math.min(yR(at(RAIN)) - 5, T + ih - SFS - 6));
   if (step * 24 >= 50 && ry + SFS < T + ih) [[RC, at(RAIN) + '%'], [MARINE, MM[Math.floor(d.NOW)] + KMH.replace('km/h', 'mm/h')]].forEach(function (f, k) {
     out += '<text x="' + (nx - 2) + '" y="' + (ry + k * SFS * 0.95) + '" fill="' + f[0] + '" ' + BIG + ' style="font-size:' + SFS + 'px;text-anchor:end">' + f[1] + '</text>';
   });
@@ -472,10 +472,13 @@ function drawWeek(d) {
   lab.innerHTML = 'Rain<small>bars mm/h · line chance %</small>';
   lab.style.left = (box.right + 5) + 'px';
   lab.style.top = (box.top + (DIVY + 4) * ZOOM) + 'px';
-  // the tag is pinned to the screen, in the rain panel under its title; where the panel is too short it reaches up from the bottom
-  var tag = document.getElementById('nowtag');
-  tag.innerHTML = rows.map(function (r, i) { return '<div style="color:' + r[0] + (i ? '' : ';font-weight:700') + '">' + r[1] + '</div>'; }).join('');
-  tag.style.cssText = 'left:' + (box.right + 4 * ZOOM) + 'px;top:' + (box.top + Math.min(RTOP + 14, T + ih - rows.length * 17 - 11) * ZOOM) + 'px;width:' + (TAGW * ZOOM) + 'px;font-size:' + (14 * ZOOM) + 'px;line-height:' + (17 * ZOOM) + 'px';
+  // two tags pinned to the screen over the top panel: time and night at its bottom left, Lido at its top right (hidden while the crosshair's tag is shown)
+  [['nowtag', rows, 'left:' + (box.right + 4 * ZOOM) + 'px;top:' + (box.top + (T + ihU - rows.length * 17 - 13) * ZOOM) + 'px'],
+   ['lidotag', lido, 'right:' + (document.documentElement.clientWidth - document.getElementById('axR').getBoundingClientRect().left + 4 * ZOOM) + 'px;top:' + (box.top + (T + 4) * ZOOM) + 'px' + (CROSS ? ';visibility:hidden' : '')]].forEach(function (t, k) {
+    var el = document.getElementById(t[0]);
+    el.innerHTML = t[1].map(function (r, i) { return '<div style="color:' + r[0] + (k || i ? '' : ';font-weight:700') + '">' + r[1] + '</div>'; }).join('');
+    el.style.cssText = t[2] + ';font-size:' + (14 * ZOOM) + 'px;line-height:' + (17 * ZOOM) + 'px';
+  });
   // day banner above the plot; the name stays pinned at the left while that day is on screen
   document.getElementById('days').innerHTML = d.DAYS.map(function (day, k) {
     var hours = (k + 1) * 24 - Math.max(k * 24, H0), w = hours * PXH;   // the first day only runs from the first hour drawn
@@ -492,6 +495,7 @@ function drawCross() {
   var v = VIEW, g = document.getElementById('wxcross'), gl = document.getElementById('axLcross'), gr = document.getElementById('axRcross');
   if (!v || !g) return;
   if (CROSS && (CROSS.i < v.H0 || CROSS.i >= v.n)) CROSS = null;
+  document.getElementById('lidotag').style.visibility = CROSS ? 'hidden' : '';   // the crosshair's tag can sit there
   if (!CROSS) { g.innerHTML = gl.innerHTML = gr.innerHTML = ''; return; }
   var d = v.d, i = CROSS.i, cx = v.x(i), bot = v.T + v.ih, cy = Math.min(bot, Math.max(v.T, CROSS.y)), h = i % 24, mono = v.mono;
   var o = '<line x1="' + cx + '" x2="' + cx + '" y1="' + v.T + '" y2="' + bot + '" stroke="var(--fg)" stroke-width="1"/>' +
