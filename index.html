@@ -103,7 +103,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = 36;              // hours across the screen: 36 when the app opens, then whatever the buttons on top set (0 = the whole week)
-var BUILD = '2026-10-13b';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-13c';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -421,11 +421,10 @@ function drawWeek(d) {
     if (f[0] > T + SFS * 0.8 && f[0] < T + ihU) out += '<text x="' + (nx - 2) + '" y="' + f[0] + '" fill="' + f[1] + '" ' + BIG + ' style="font-size:' + SFS + 'px;text-anchor:end">' + f[2] + '</text>';
   });
   function at(arr) { var i = Math.floor(d.NOW), f = d.NOW - i, b = arr[Math.min(n - 1, i + 1)]; return Math.round(arr[i] + (b - arr[i]) * f); }
-  var rows = [   // the now tag, pinned in the rain panel: time, night, rain, Lido (wind and temperature are beside the now line)
+  var rows = [   // the now tag, pinned in the rain panel: time, night, Lido (wind, temperature and rain are beside the now line)
     ['var(--fg)', 'Now ' + fmt(d.NOW - d.TODAY * 24)],
     // the coming night (tonight's sunset to tomorrow's sunrise); before sunrise, the night in progress goes above it
-    ['var(--night)', 'Night ' + fmt(d.SUN[d.TODAY][1]) + '–' + fmt(d.SUN[d.TODAY + 1][0])],
-    [RC, 'Rain ' + at(RAIN) + '%' + (MM[Math.floor(d.NOW)] ? ' · ' + MM[Math.floor(d.NOW)] + ' mm' : '')]
+    ['var(--night)', 'Night ' + fmt(d.SUN[d.TODAY][1]) + '–' + fmt(d.SUN[d.TODAY + 1][0])]
   ];
   if (d.NOW - d.TODAY * 24 < d.SUN[d.TODAY][0]) rows.splice(1, 0, ['var(--night)', 'Night until ' + fmt(d.SUN[d.TODAY][0])]);
   // latest published Lido water temperature and the day it was measured
@@ -435,6 +434,11 @@ function drawWeek(d) {
     var est = LIDO.estimate != null && LIDO.estimate_date !== LIDO.date;
     rows.push(['var(--lido)', est ? 'Lido ~' + Math.floor(LIDO.estimate) + '° (' + LIDO.lido + '° ' + lidoDay + ')' : 'Lido ' + LIDO.lido + '° · ' + lidoDay]);
   }
+  // rain right now, left of the now line and below the tag: chance above its curve where there is room, then the amount in this hour
+  var ry = Math.max(RTOP + 25 + rows.length * 17 + SFS * 0.8, Math.min(yR(at(RAIN)) - 5, T + ih - SFS - 6));
+  if (step * 24 >= 50 && ry + SFS < T + ih) [[RC, at(RAIN) + '%'], [MARINE, MM[Math.floor(d.NOW)] + KMH.replace('km/h', 'mm/h')]].forEach(function (f, k) {
+    out += '<text x="' + (nx - 2) + '" y="' + (ry + k * SFS * 0.95) + '" fill="' + f[0] + '" ' + BIG + ' style="font-size:' + SFS + 'px;text-anchor:end">' + f[1] + '</text>';
+  });
   // After the last day, a column of Lido practical details from lido.json: open or closed, today's hours, sauna sessions
   var INFO = LIDO && LIDO.hours ? 215 : 0;
   if (INFO) {
