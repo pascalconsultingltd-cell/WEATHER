@@ -92,7 +92,7 @@ html, body { height:100%; overflow:hidden; background:var(--surface); }
 <div class="rainlab" id="rainlab"></div>
 <div class="nowtag" id="nowtag"></div>
 <div class="nowtag" id="lidotag"></div>
-<div class="zoomsel" id="zoomsel"><button data-h="-1">Day</button><button data-h="36">1.5d</button><button data-h="72">3d</button><button data-h="0">7d</button></div>
+<div class="zoomsel" id="zoomsel"><button data-h="-1">Now</button><button data-h="36">1.5d</button><button data-h="72">3d</button><button data-h="0">7d</button></div>
 <div class="chart" id="chart">
   <svg id="axL"></svg>
   <div class="scroll"><div class="days" id="days"></div><svg id="wxchart" role="img" aria-label="Hourly forecast chart, 7 days"></svg></div>
@@ -103,13 +103,14 @@ html, body { height:100%; overflow:hidden; background:var(--surface); }
 var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
-var FIT_HOURS = 36;              // hours across the screen: 36 when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = today from sunrise to sunset)
-var BUILD = '2026-10-13e';       // change on every release: a page still running an older build reloads itself
+var FIT_HOURS = 36;              // hours across the screen: 36 when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
+var BUILD = '2026-10-13f';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
 var STRONG = 25;                 // km/h: the wind/gust band is drawn darker above this level
 var ARROW2 = 30, ARROW3 = 45;    // km/h gust: wind arrows get a double head from ARROW2 and a triple head from ARROW3
+var NOW_ROOM = 46;               // chart units kept left of the now line in the "Now" view, for the figures beside it
 var PAST_HOURS = 7;              // hours before now at the left edge when the app opens (room for the figures beside the now line)
 var BACK_HOURS = 16;             // how far before now the chart can be dragged back
 var REFRESH_MIN = 10;            // re-fetch interval while the page is open
@@ -130,7 +131,9 @@ function drawWeek(d) {
   var WIND = d.WIND, GUST = d.GUST, RAIN = d.RAIN, MM = d.MM, TEMP = d.TEMP, FEEL = d.FEEL, DIR = d.DIR, ICON = d.ICON;
   var chartEl = document.getElementById('chart'), AL = 26, AR = 33;
   PLOTW = chartEl.clientWidth - (AL + AR) * ZOOM;
-  if (!USER_ZOOM) PXH = PLOTW / (FIT_HOURS < 0 ? d.SUN[d.TODAY][1] - d.SUN[d.TODAY][0] : FIT_HOURS || WIND.length - Math.max(0, Math.floor(d.NOW) - PAST_HOURS));   // 0 = from the opening position to the end of the week
+  var hr = d.NOW - d.TODAY * 24, dusk = d.SUN[d.TODAY][1];   // "Now" view ends at sunset, or once that has passed an hour after tomorrow's sunrise
+  if (!USER_ZOOM) PXH = FIT_HOURS < 0 ? Math.min(PXH_MAX, (PLOTW - NOW_ROOM * ZOOM) / ((hr < dusk ? dusk : 25 + d.SUN[d.TODAY + 1][0]) - hr))
+    : PLOTW / (FIT_HOURS || WIND.length - Math.max(0, Math.floor(d.NOW) - PAST_HOURS));   // 0 = from the opening position to the end of the week
   [].forEach.call(document.querySelectorAll('#zoomsel button'), function (b) { b.className = !USER_ZOOM && +b.getAttribute('data-h') === FIT_HOURS ? 'on' : ''; });
   var n = WIND.length, step = PXH / ZOOM, W = n * step, H = Math.max(200, Math.floor((chartEl.clientHeight - 26) / ZOOM)), T = 58, B = 18, ih = H - T - B;
   // two panels: wind and temperature on top (height ihU), rain chance below (height RH, top edge at RTOP)
@@ -736,8 +739,8 @@ document.getElementById('zoomsel').addEventListener('click', function (e) {
   var hour = sc.scrollLeft / PXH;
   FIT_HOURS = +h; USER_ZOOM = false;
   drawWeek(VIEW.d);
-  // the whole week only fits from the opening position; the day view starts at today's sunrise
-  sc.scrollLeft = (FIT_HOURS < 0 ? VIEW.d.TODAY * 24 + VIEW.d.SUN[VIEW.d.TODAY][0] + 0.5 - VIEW.H0 : FIT_HOURS ? hour : VIEW.HOME - VIEW.H0) * PXH;
+  // the whole week only fits from the opening position; the "Now" view starts just left of the now line
+  sc.scrollLeft = FIT_HOURS < 0 ? (VIEW.d.NOW + 0.5 - VIEW.H0) * PXH - NOW_ROOM * ZOOM : (FIT_HOURS ? hour : VIEW.HOME - VIEW.H0) * PXH;
 });
 // redraw to the new height when the phone is rotated
 window.addEventListener('resize', function () {
