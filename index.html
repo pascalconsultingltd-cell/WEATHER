@@ -76,7 +76,7 @@ html, body { height:100%; overflow:hidden; background:var(--surface); }
 /* title of the rain panel, pinned to its top-left corner while the chart scrolls underneath */
 .rainlab { position:fixed; z-index:1; pointer-events:none; white-space:nowrap; color:#0b3d91; font:700 14px var(--font-display); text-shadow:0 0 3px var(--surface), 0 0 3px var(--surface); }
 .rainlab small { margin-left:5px; color:var(--muted); font:400 10px var(--font-data); }
-/* today's Lido figure, pinned at the right edge of the plot at its height on the temperature scale while the chart scrolls */
+/* the Lido figure, pinned at the left edge of the plot at its height on the temperature scale; it follows the day at that edge as the chart slides */
 .lidomark { position:fixed; z-index:1; pointer-events:none; display:flex; align-items:center; gap:3px; transform:translateY(-50%); color:var(--lido);
   font-family:"DM Mono", monospace; font-weight:700; text-shadow:0 0 2px var(--surface), 0 0 2px var(--surface), 0 0 3px var(--surface); }
 .lidomark:empty { display:none; }
@@ -102,14 +102,14 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-14b';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-14c';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
 var STRONG = 25;                 // km/h: the wind/gust band is drawn darker above this level
 var ARROW_STEP = 10, ARROW_MAX = 4;   // wind arrows: one more per ARROW_STEP km/h of the wind and gust average (under 20: 1, 20-30: 2, 30-40: 3), at most ARROW_MAX
-var NOW_ROOM = 46;               // chart units kept left of the now line in the "Now" view, for the figures beside it
-var PAST_HOURS = 7;              // hours before now at the left edge when the app opens (room for the figures beside the now line)
+var NOW_ROOM = 64;               // chart units kept left of the now line in the "Now" view, for the figures beside it
+var PAST_HOURS = 10;             // hours before now at the left edge when the app opens (room for the figures beside the now line)
 var BACK_HOURS = 16;             // how far before now the chart can be dragged back
 var REFRESH_MIN = 10;            // re-fetch interval while the page is open
 var RAIN_STYLE = 'gradient';     // rain fill: 'gradient' (blue fade), 'bars' (one bar per hour), 'drops' (grey with streaks)
@@ -139,7 +139,7 @@ function drawWeek(d) {
   var HOME = Math.max(0, Math.floor(d.NOW) - PAST_HOURS), H0 = Math.max(0, Math.floor(d.NOW) - BACK_HOURS), X0 = H0 * step;   // hour at the left edge on opening; first hour drawn
   // how often things are drawn, so they never overlap when the time axis is squeezed
   function every(list, min) { for (var q = 0; q < list.length - 1 && list[q] * step < min; q++); return list[q]; }
-  var IK = every([1, 2, 3, 4, 6, 8, 12, 24], 34), HK = every([1, 2, 3, 6, 12], 14), AK = every([1, 2, 3, 4, 6, 8, 12], 12);   // sky icons, hour labels, wind arrows
+  var IK = every([1, 2, 3, 4, 6, 8, 12, 24], 34), HK = every([1, 2, 3, 6, 12], 18), AK = every([1, 2, 3, 4, 6, 8, 12], 12);   // sky icons, hour labels, wind arrows
   var maxG = Math.max.apply(null, GUST);
   var WMAX = Math.max(30, Math.ceil(maxG / 30) * 30);              // 3 gridline intervals
   var RMAX = Math.min(100, Math.max(30, Math.ceil(Math.max.apply(null, RAIN) / 30) * 30));
@@ -407,7 +407,7 @@ function drawWeek(d) {
         ? '<text x="' + ix + '" y="38" text-anchor="middle" font-size="38">' + ICON[pick][0] + '</text>'
         : '<image href="' + ICON_BASE + ICON[pick][1] + '.svg" x="' + (ix - sz / 2) + '" y="' + (24 - sz / 2) + '" width="' + sz + '" height="' + sz + '"/>';
     }
-    if (h % HK === 0) out += '<text x="' + x(i) + '" y="' + (T + ihU - 3) + '" text-anchor="middle" font-size="11" fill="var(--muted)" stroke="var(--surface)" stroke-width="2.5" paint-order="stroke" ' + mono + '>' + (h < 10 ? '0' + h : h) + '</text>';
+    if (h % HK === 0) out += '<text x="' + x(i) + '" y="' + (T + ihU - 3) + '" text-anchor="middle" font-size="12.5" fill="var(--muted)" stroke="var(--surface)" stroke-width="2.5" paint-order="stroke" ' + mono + '>' + (h < 10 ? '0' + h : h) + '</text>';
   }
   drawDayTemps();
   // current-time marker with a small tag of the conditions right now (interpolated between the hourly values)
@@ -417,24 +417,17 @@ function drawWeek(d) {
   out += '<rect x="' + X0 + '" y="0" width="' + Math.max(0, nx - X0) + '" height="' + (T + ih) + '" fill="#6b7780" fill-opacity="0.16"/>';
   out += '<line x1="' + nx + '" x2="' + nx + '" y1="' + T + '" y2="' + (T + ih) + '" stroke="var(--fg)" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="3 3"/>';
   // the time now at the foot of the now line, just above the hours
-  out += '<text x="' + nx + '" y="' + (T + ihU - 17) + '" text-anchor="middle" font-size="12" font-weight="700" fill="var(--fg)" stroke="var(--surface)" stroke-width="3" paint-order="stroke" ' + mono + '>' + fmt(d.NOW - d.TODAY * 24) + '</text>';
-  // Lido water temperature: two little waves and the figure, at its height on the temperature scale; today's is pinned at the
-  // right edge of the plot (see lidomark), later days are at 20:00, only when the figure changes
-  function waves(wx, wy) {
-    out += '<path d="M' + wx + ',' + (wy - 2.5) + ' q2.5,-3 5,0 t5,0 t5,0 M' + wx + ',' + (wy + 2.5) + ' q2.5,-3 5,0 t5,0 t5,0" fill="none" stroke="var(--lido)" stroke-width="1.8" stroke-linecap="round"/>';
-  }
-  POOL.forEach(function (v, k) {
-    var ly = yT(v) + SFS * 0.3;
-    if (k <= d.TODAY || step * 24 < 50 || Math.floor(v + 1e-6) === Math.floor(POOL[k - 1] + 1e-6) || yT(v) < T + SFS * 0.5 || ly > T + ihU) return;
-    waves(x(k * 24 + 20) - 18, yT(v));
-    out += '<text x="' + x(k * 24 + 20) + '" y="' + ly + '" fill="var(--lido)" ' + BIG + ' style="font-size:' + SFS + 'px;text-anchor:start">' + Math.floor(v + 1e-6) + '°</text>';
-  });
+  out += '<text x="' + nx + '" y="' + (T + ihU - 19) + '" text-anchor="middle" font-size="12" font-weight="700" fill="var(--fg)" stroke="var(--surface)" stroke-width="3" paint-order="stroke" ' + mono + '>' + fmt(d.NOW - d.TODAY * 24) + '</text>';
   // the values right now, just left of the now line (drawn over the wash): gust and temperature above their curves,
-  // wind under its curve (clear of the time at the foot of the now line), pushed apart where they would overlap
-  var nowf = [[yW(at(GUST)) - 5, 'var(--wind)', at(GUST) + KMH], [Math.min(yW(at(WIND)) + SFS * 0.8 + 4, T + ihU - 32), 'var(--wind)', at(WIND) + KMH], [yT(at(TEMP)) - 5, GOLD, at(TEMP) + '°']];
+  // wind under its curve (clear of the time at the foot of the now line), pushed apart where they would overlap;
+  // a slot is kept for today's Lido figure, which is pinned on screen (placeLido) at the height found here
+  var nowf = [[yW(at(GUST)) - 5, 'var(--wind)', at(GUST) + KMH], [Math.min(yW(at(WIND)) + SFS * 0.8 + 4, T + ihU - 34), 'var(--wind)', at(WIND) + KMH], [yT(at(TEMP)) - 5, GOLD, at(TEMP) + '°']];
+  var lidoY = POOL.length ? yT(POOL[d.TODAY]) + SFS * 0.3 : -1;
+  if (POOL.length) nowf.push([lidoY]);
   if (step * 24 >= 50) nowf.sort(function (p, q) { return p[0] - q[0]; }).forEach(function (f, k) {
     if (k) f[0] = Math.max(f[0], nowf[k - 1][0] + SFS * 0.95);
-    if (f[0] < T + SFS * 0.8 || f[0] > T + ihU) return;
+    if (!f[1]) lidoY = f[0];
+    if (!f[1] || f[0] < T + SFS * 0.8 || f[0] > T + ihU) return;
     out += '<text x="' + (nx - 2) + '" y="' + f[0] + '" fill="' + f[1] + '" ' + BIG + ' style="font-size:' + SFS + 'px;text-anchor:end">' + f[2] + '</text>';
   });
   function at(arr) { var i = Math.floor(d.NOW), f = d.NOW - i, b = arr[Math.min(n - 1, i + 1)]; return Math.round(arr[i] + (b - arr[i]) * f); }
@@ -473,15 +466,12 @@ function drawWeek(d) {
   size('axL', 0, AL).innerHTML = axL + '<g id="axLcross"></g>';
   size('axR', 0, AR).innerHTML = axR + '<g id="axRcross"></g>';
   VIEW = { d: d, n: n, step: step, W: W, T: T, ih: ih, ihU: ihU, RTOP: RTOP, H0: H0, X0: X0, x: x, yW: yW, yT: yT, yR: yR,
-    HOME: HOME, POOL: POOL, vW: vW, vT: vT, RMAX: RMAX, MMAX: MMAX, MARINE: MARINE, TMIN: TMIN, TMAX: TMAX, GOLD: GOLD, RC: RC, mono: mono };
+    HOME: HOME, POOL: POOL, lidoY: lidoY, SFS: SFS, vW: vW, vT: vT, RMAX: RMAX, MMAX: MMAX, MARINE: MARINE, TMIN: TMIN, TMAX: TMAX, GOLD: GOLD, RC: RC, mono: mono };
   drawCross();
   var lab = document.getElementById('rainlab'), box = document.getElementById('axL').getBoundingClientRect();
   lab.innerHTML = 'Rain<small>bars mm/h · line chance %</small>';
   lab.style.left = (box.right + 5) + 'px';
   lab.style.top = (box.top + (DIVY + 4) * ZOOM) + 'px';
-  var lm = document.getElementById('lidomark'), lmy = POOL.length ? yT(POOL[d.TODAY]) : -1;
-  lm.innerHTML = lmy > T && lmy < T + ihU ? '<svg width="' + 16 * ZOOM + '" height="' + 10 * ZOOM + '" viewBox="-0.5 -5 16 10"><path d="M0,-2.5 q2.5,-3 5,0 t5,0 t5,0 M0,2.5 q2.5,-3 5,0 t5,0 t5,0" fill="none" stroke="var(--lido)" stroke-width="1.8" stroke-linecap="round"/></svg>' + Math.floor(POOL[d.TODAY] + 1e-6) + '°' : '';
-  lm.style.cssText = 'right:' + (document.documentElement.clientWidth - document.getElementById('axR').getBoundingClientRect().left + 3) + 'px;top:' + (box.top + lmy * ZOOM) + 'px;font-size:' + (SFS * ZOOM) + 'px';
   // day banner above the plot; the name stays pinned at the left while that day is on screen
   document.getElementById('days').innerHTML = d.DAYS.map(function (day, k) {
     var hours = (k + 1) * 24 - Math.max(k * 24, H0), w = hours * PXH;   // the first day only runs from the first hour drawn
@@ -491,7 +481,20 @@ function drawWeek(d) {
   }).join('') + (INFO ? '<div class="day" style="width:' + INFO * ZOOM + 'px"><b>Lido info</b></div>' : '');
   // on opening, the left edge is a little before now; the earlier hours are there to drag back to
   if (!HOMED) { HOMED = true; document.querySelector('.scroll').scrollLeft = FIT_HOURS < 0 ? (d.NOW + 0.5 - H0) * PXH - NOW_ROOM * ZOOM : (HOME - H0) * PXH; }
+  placeLido();
 }
+
+// The Lido figure (two little waves and the water temperature) is pinned at the left edge of the plot, at its height on the
+// temperature scale. It shows the day at that edge: today's beside the now line, then each later day's as the chart slides.
+function placeLido() {
+  var v = VIEW, el = document.getElementById('lidomark');
+  if (!v || !v.POOL.length) { el.innerHTML = ''; return; }
+  var k = Math.min(v.POOL.length - 1, Math.max(v.d.TODAY, Math.floor((v.X0 / v.step + document.querySelector('.scroll').scrollLeft / PXH) / 24)));
+  var y = k === v.d.TODAY ? v.lidoY : v.yT(v.POOL[k]) + v.SFS * 0.3, box = document.getElementById('axL').getBoundingClientRect();
+  el.innerHTML = y > v.T + v.SFS * 0.5 && y < v.T + v.ihU ? '<svg width="' + 16 * ZOOM + '" height="' + 10 * ZOOM + '" viewBox="-0.5 -5 16 10"><path d="M0,-2.5 q2.5,-3 5,0 t5,0 t5,0 M0,2.5 q2.5,-3 5,0 t5,0 t5,0" fill="none" stroke="var(--lido)" stroke-width="1.8" stroke-linecap="round"/></svg>' + Math.floor(v.POOL[k] + 1e-6) + '°' : '';
+  el.style.cssText = 'left:' + (box.right + 3) + 'px;top:' + (box.top + (y - v.SFS * 0.3) * ZOOM) + 'px;font-size:' + (v.SFS * ZOOM) + 'px';
+}
+document.querySelector('.scroll').addEventListener('scroll', placeLido, { passive: true });
 
 // Crosshair: a line on one hour with that hour's values in a tag beside it, and a level line whose value is read on the axes.
 function drawCross() {
