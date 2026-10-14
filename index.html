@@ -76,11 +76,6 @@ html, body { height:100%; overflow:hidden; background:var(--surface); }
 /* title of the rain panel, pinned to its top-left corner while the chart scrolls underneath */
 .rainlab { position:fixed; z-index:1; pointer-events:none; white-space:nowrap; color:#0b3d91; font:700 14px var(--font-display); text-shadow:0 0 3px var(--surface), 0 0 3px var(--surface); }
 .rainlab small { margin-left:5px; color:var(--muted); font:400 10px var(--font-data); }
-/* the two tags pinned over the top panel while the chart scrolls underneath: time and night bottom left, Lido top right */
-.nowtag { position:fixed; z-index:1; pointer-events:none; box-sizing:border-box; padding:3px 9px 4px; border:1px solid rgba(211,221,228,0.7); border-radius:6px;
-  background:rgba(255,255,255,0.3); white-space:nowrap; overflow:hidden; font-family:"DM Mono", monospace; font-weight:500;
-  text-shadow:0 0 2px var(--surface), 0 0 2px var(--surface), 0 0 3px var(--surface); }
-.nowtag:empty { display:none; }
 /* how many days fill the screen: four buttons over the right end of the day banner */
 .zoomsel { position:fixed; z-index:2; top:env(safe-area-inset-top); right:env(safe-area-inset-right); height:30px; display:flex; align-items:center; gap:4px; padding:0 5px; border-bottom-left-radius:8px;
   background:var(--surface); border-left:1px solid var(--line); border-bottom:1px solid var(--line); box-sizing:border-box; }
@@ -90,8 +85,6 @@ html, body { height:100%; overflow:hidden; background:var(--surface); }
 </style></head><body>
 <p class="status" id="status"></p>
 <div class="rainlab" id="rainlab"></div>
-<div class="nowtag" id="nowtag"></div>
-<div class="nowtag" id="lidotag"></div>
 <div class="zoomsel" id="zoomsel"><button data-h="-1">Now</button><button data-h="36">1.5d</button><button data-h="72">3d</button><button data-h="0">7d</button></div>
 <div class="chart" id="chart">
   <svg id="axL"></svg>
@@ -104,14 +97,14 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-13p';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-14a';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.30;          // share of the plot height given to the rain panel at the bottom
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
 var STRONG = 25;                 // km/h: the wind/gust band is drawn darker above this level
 var ARROW_STEP = 10, ARROW_MAX = 4;   // wind arrows: one more per ARROW_STEP km/h of the wind and gust average (under 20: 1, 20-30: 2, 30-40: 3), at most ARROW_MAX
-var NOW_ROOM = 46;               // chart units kept left of the now line in the "Now" view, for the figures beside it
-var PAST_HOURS = 7;              // hours before now at the left edge when the app opens (room for the figures beside the now line)
+var NOW_ROOM = 64;               // chart units kept left of the now line in the "Now" view, for the figures beside it
+var PAST_HOURS = 10;             // hours before now at the left edge when the app opens (room for the figures beside the now line)
 var BACK_HOURS = 16;             // how far before now the chart can be dragged back
 var REFRESH_MIN = 10;            // re-fetch interval while the page is open
 var RAIN_STYLE = 'gradient';     // rain fill: 'gradient' (blue fade), 'bars' (one bar per hour), 'drops' (grey with streaks)
@@ -135,7 +128,7 @@ function drawWeek(d) {
   if (!USER_ZOOM) PXH = FIT_HOURS < 0 ? Math.min(PXH_MAX, (PLOTW - NOW_ROOM * ZOOM) / ((hr < dusk ? dusk : 25 + d.SUN[d.TODAY + 1][0]) - hr))
     : PLOTW / (FIT_HOURS || WIND.length - Math.max(0, Math.floor(d.NOW) - PAST_HOURS));   // 0 = from the opening position to the end of the week
   [].forEach.call(document.querySelectorAll('#zoomsel button'), function (b) { b.className = !USER_ZOOM && +b.getAttribute('data-h') === FIT_HOURS ? 'on' : ''; });
-  var n = WIND.length, step = PXH / ZOOM, W = n * step, H = Math.max(200, Math.floor((chartEl.clientHeight - 26) / ZOOM)), T = 58, B = 18, ih = H - T - B;
+  var n = WIND.length, step = PXH / ZOOM, W = n * step, H = Math.max(200, Math.floor((chartEl.clientHeight - 26) / ZOOM)), T = 58, B = 4, ih = H - T - B;
   // two panels: wind and temperature on top (height ihU), rain chance below (height RH, top edge at RTOP)
   var RH = Math.round(ih * RAIN_SPLIT), ihU = ih - RH - 23, RTOP = T + ih - RH;
   var HOME = Math.max(0, Math.floor(d.NOW) - PAST_HOURS), H0 = Math.max(0, Math.floor(d.NOW) - BACK_HOURS), X0 = H0 * step;   // hour at the left edge on opening; first hour drawn
@@ -291,17 +284,17 @@ function drawWeek(d) {
   for (var k = 1; k < d.SUN.length; k++) {
     out += '<line x1="' + (k * 24 * step) + '" x2="' + (k * 24 * step) + '" y1="0" y2="' + H + '" stroke="var(--line)" stroke-width="1"/>';
   }
-  // a gridline and a wind label every 10 km/h, a temperature label every 2 degrees
+  // a wind label every 10 km/h, a temperature label and a faint gold gridline every 2 degrees
   // (20 and 4, 40 and 8... once a squeeze brings them closer than 14)
   var g, gy;
   out += '<line x1="0" x2="' + W + '" y1="' + (T + ihU) + '" y2="' + (T + ihU) + '" stroke="var(--line)" stroke-width="1"/>';
   for (var ws = 10; yW(0) - yW(ws) < 14; ws *= 2);
   for (var wv = Math.ceil(Math.max(0, vW(T + ihU)) / ws - 1e-6) * ws; wv <= vW(T) + 1e-6; wv += ws) {
-    out += '<line x1="0" x2="' + W + '" y1="' + yW(wv) + '" y2="' + yW(wv) + '" stroke="var(--line)" stroke-width="1"/>';
     axL += '<text x="21" y="' + (yW(wv) + 4) + '" text-anchor="end" font-size="11" fill="var(--wind)" ' + mono + '>' + wv + '</text>';
   }
   for (var ts = 2; yT(0) - yT(ts) < 14; ts *= 2);
   for (var tv = Math.ceil(vT(T + ihU) / ts - 1e-6) * ts; tv <= vT(T) + 1e-6; tv += ts) {
+    out += '<line x1="0" x2="' + W + '" y1="' + yT(tv) + '" y2="' + yT(tv) + '" stroke="' + GOLD + '" stroke-opacity="0.3" stroke-width="1"/>';
     axR += '<text x="4" y="' + (yT(tv) + 4) + '" text-anchor="start" font-size="11" fill="' + GOLD + '" ' + mono + '>' + tv + '°</text>';
   }
   for (g = 0; g <= 2; g++) {
@@ -370,13 +363,6 @@ function drawWeek(d) {
   }
   out += '<path d="' + curve(fp) + '" fill="none" stroke="' + GOLD + '" stroke-width="1.6" stroke-linecap="round" clip-path="url(#wxup)"/>';
   out += '<path d="' + curve(tp) + '" fill="none" stroke="' + GOLD + '" stroke-width="2.1" stroke-linecap="round" clip-path="url(#wxup)"/>';
-  // Lido water temperature as a bold blue line on the temperature scale, one value per day joined smoothly at midday
-  if (POOL.length) {
-    var lp = POOL.map(function (v, k) { return [x(k * 24 + 12), yT(v)]; });
-    lp.unshift([0, lp[0][1]]); lp.push([W, lp[lp.length - 1][1]]);
-    out += '<path d="' + curve(lp) + '" fill="none" stroke="var(--surface)" stroke-width="4.9" stroke-opacity="0.7" clip-path="url(#wxup)"/>';
-    out += '<path d="' + curve(lp) + '" fill="none" stroke="var(--lido)" stroke-width="2.8" stroke-linecap="round" clip-path="url(#wxup)"/>';
-  }
   // wind-direction arrows, with one to ARROW_MAX heads by the average of wind and gust. Top panel: as many arrows as heads, spread evenly
   // between the wind and gust curves. Rain panel: one arrow, in a row along the top under the title.
   GUST.forEach(function (gv, i) {
@@ -397,10 +383,11 @@ function drawWeek(d) {
   d.SUN.forEach(function (s, k) {
     var a = k * 24, g = GUST.slice(a, a + 24), mg = Math.max.apply(null, g);
     if (a + g.indexOf(mg) >= H0 && yW(mg) - 20 < T + ihU) out += '<text x="' + x(a + g.indexOf(mg)) + '" y="' + Math.max(T + SFS * 0.8, yW(mg) - 6) + '" fill="var(--wind)" ' + BIG + ' style="font-size:' + Math.max(9, SFS) + 'px">' + mg + KMH + '</text>';
-    // sunrise / sunset times, centred on the day/night boundary just below the sky icons
-    s.forEach(function (v) {
+    // sunrise and sunset: a small icon on the day/night boundary at the top of the panel, the time under it
+    s.forEach(function (v, j) {
       if (xt(a + v) < X0 + 13 || (s[1] - s[0]) * step < 30) return;   // would be cut by the left edge, or the two would collide
-      out += '<text x="' + xt(a + v) + '" y="' + (T - 2) + '" text-anchor="middle" font-size="8.5" font-weight="500" fill="var(--fg)" ' + mono + '>' + fmt(v) + '</text>';
+      out += '<image href="' + ICON_BASE + (j ? 'sunset' : 'sunrise') + '.svg" x="' + (xt(a + v) - 17) + '" y="' + (T - 9) + '" width="34" height="34"/>';
+      out += '<text x="' + xt(a + v) + '" y="' + (T + 30) + '" text-anchor="middle" font-size="9" font-weight="500" fill="var(--fg)" stroke="var(--surface)" stroke-width="2.5" paint-order="stroke" ' + mono + '>' + fmt(v) + '</text>';
     });
   });
   for (var i = 0; i < n; i++) {
@@ -415,7 +402,7 @@ function drawWeek(d) {
         ? '<text x="' + ix + '" y="38" text-anchor="middle" font-size="38">' + ICON[pick][0] + '</text>'
         : '<image href="' + ICON_BASE + ICON[pick][1] + '.svg" x="' + (ix - sz / 2) + '" y="' + (24 - sz / 2) + '" width="' + sz + '" height="' + sz + '"/>';
     }
-    if (h % HK === 0) out += '<text x="' + x(i) + '" y="' + (H - 5) + '" text-anchor="middle" font-size="9.5" fill="var(--muted)" ' + mono + '>' + (h < 10 ? '0' + h : h) + '</text>';
+    if (h % HK === 0) out += '<text x="' + x(i) + '" y="' + (T + ihU - 3) + '" text-anchor="middle" font-size="9.5" fill="var(--muted)" stroke="var(--surface)" stroke-width="2.5" paint-order="stroke" ' + mono + '>' + (h < 10 ? '0' + h : h) + '</text>';
   }
   drawDayTemps();
   // current-time marker with a small tag of the conditions right now (interpolated between the hourly values)
@@ -424,34 +411,28 @@ function drawWeek(d) {
   out += '<rect x="' + X0 + '" y="0" width="' + Math.max(0, nx - X0) + '" height="' + (T + ih) + '" fill="var(--surface)" fill-opacity="0.5"/>';
   out += '<rect x="' + X0 + '" y="0" width="' + Math.max(0, nx - X0) + '" height="' + (T + ih) + '" fill="#6b7780" fill-opacity="0.16"/>';
   out += '<line x1="' + nx + '" x2="' + nx + '" y1="' + T + '" y2="' + (T + ih) + '" stroke="var(--fg)" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="3 3"/>';
-  // Lido figures under their line, at 20:00 on each later day
+  // Lido water temperature: two little waves and the figure, at its height on the temperature scale; today's beside the now line,
+  // later days at 20:00, only when the figure changes
+  function waves(wx, wy) {
+    out += '<path d="M' + wx + ',' + (wy - 2.5) + ' q2.5,-3 5,0 t5,0 t5,0 M' + wx + ',' + (wy + 2.5) + ' q2.5,-3 5,0 t5,0 t5,0" fill="none" stroke="var(--lido)" stroke-width="1.8" stroke-linecap="round"/>';
+  }
   POOL.forEach(function (v, k) {
-    var ly = yT(v) + SFS * 0.8 + 5;
-    if (k <= d.TODAY || step * 24 < 50 || yT(v) < T || ly > T + ihU) return;
-    out += '<text x="' + x(k * 24 + 20) + '" y="' + ly + '" fill="var(--lido)" ' + BIG + ' style="font-size:' + SFS + 'px">' + Math.floor(v + 1e-6) + '°</text>';
+    var ly = yT(v) + SFS * 0.3;
+    if (k <= d.TODAY || step * 24 < 50 || Math.floor(v + 1e-6) === Math.floor(POOL[k - 1] + 1e-6) || yT(v) < T + SFS * 0.5 || ly > T + ihU) return;
+    waves(x(k * 24 + 20) - 18, yT(v));
+    out += '<text x="' + x(k * 24 + 20) + '" y="' + ly + '" fill="var(--lido)" ' + BIG + ' style="font-size:' + SFS + 'px;text-anchor:start">' + Math.floor(v + 1e-6) + '°</text>';
   });
   // the values right now, just left of the now line (drawn over the wash): gust and temperature above their curves,
-  // wind and Lido under theirs, pushed apart where they would overlap
+  // wind under its curve, Lido at its level, pushed apart where they would overlap
   var nowf = [[yW(at(GUST)) - 5, 'var(--wind)', at(GUST) + KMH], [yW(at(WIND)) + SFS * 0.8 + 4, 'var(--wind)', at(WIND) + KMH], [yT(at(TEMP)) - 5, GOLD, at(TEMP) + '°']];
-  if (POOL.length) nowf.push([yT(POOL[d.TODAY]) + SFS * 0.8 + 5, 'var(--lido)', Math.floor(POOL[d.TODAY] + 1e-6) + '°']);
+  if (POOL.length) nowf.push([yT(POOL[d.TODAY]) + SFS * 0.3, 'var(--lido)', Math.floor(POOL[d.TODAY] + 1e-6) + '°', 1]);
   if (step * 24 >= 50) nowf.sort(function (p, q) { return p[0] - q[0]; }).forEach(function (f, k) {
     if (k) f[0] = Math.max(f[0], nowf[k - 1][0] + SFS * 0.95);
-    if (f[0] > T + SFS * 0.8 && f[0] < T + ihU) out += '<text x="' + (nx - 2) + '" y="' + f[0] + '" fill="' + f[1] + '" ' + BIG + ' style="font-size:' + SFS + 'px;text-anchor:end">' + f[2] + '</text>';
+    if (f[0] < T + SFS * 0.8 || f[0] > T + ihU) return;
+    out += '<text x="' + (nx - 2) + '" y="' + f[0] + '" fill="' + f[1] + '" ' + BIG + ' style="font-size:' + SFS + 'px;text-anchor:end">' + f[2] + '</text>';
+    if (f[3]) waves(nx - 2 - f[2].length * SFS * 0.6 - 18, f[0] - SFS * 0.3);   // the Lido figure has its waves in front
   });
   function at(arr) { var i = Math.floor(d.NOW), f = d.NOW - i, b = arr[Math.min(n - 1, i + 1)]; return Math.round(arr[i] + (b - arr[i]) * f); }
-  var lido = [], rows = [   // the now tag: time and night (wind, temperature and rain are beside the now line); Lido has a tag of its own
-    ['var(--fg)', 'Now ' + fmt(d.NOW - d.TODAY * 24)],
-    // the coming night (tonight's sunset to tomorrow's sunrise); before sunrise, the night in progress goes above it
-    ['var(--night)', 'Night ' + fmt(d.SUN[d.TODAY][1]) + '–' + fmt(d.SUN[d.TODAY + 1][0])]
-  ];
-  if (d.NOW - d.TODAY * 24 < d.SUN[d.TODAY][0]) rows.splice(1, 0, ['var(--night)', 'Night until ' + fmt(d.SUN[d.TODAY][0])]);
-  // latest published Lido water temperature and the day it was measured
-  // (the Lido is published about weekly; "~" is today's estimate worked out from the air temperatures since then)
-  if (LIDO && LIDO.lido != null) {
-    var lidoDay = new Date(LIDO.date + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-    var est = LIDO.estimate != null && LIDO.estimate_date !== LIDO.date;
-    lido.push(['var(--lido)', est ? 'Lido ~' + Math.floor(LIDO.estimate) + '° (' + LIDO.lido + '° ' + lidoDay + ')' : 'Lido ' + LIDO.lido + '° · ' + lidoDay]);
-  }
   // rain right now, left of the now line: chance above its curve where there is room, then the amount in this hour
   var ry = Math.max(RTOP + 16 + SFS * 0.8, Math.min(yR(at(RAIN)) - 5, T + ih - SFS - 6));
   if (step * 24 >= 50 && ry + SFS < T + ih) [[RC, at(RAIN) + '%'], [MARINE, MM[Math.floor(d.NOW)] + KMH.replace('km/h', 'mm/h')]].forEach(function (f, k) {
@@ -461,7 +442,10 @@ function drawWeek(d) {
   var INFO = LIDO && LIDO.hours ? 215 : 0;
   if (INFO) {
     var cap = function (t) { return t.charAt(0).toUpperCase() + t.slice(1); }, one = LIDO.hours.sessions.length === 1 && LIDO.hours.sessions[0];
+    // latest published reading and the day it was measured (published about weekly; "~" is today's estimate from the air temperatures since)
+    var lidoDay = new Date(LIDO.date + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
     var info = [[17, 700, 'var(--lido)', 'Lido'], [12, 500, 'var(--fg)', cap((LIDO.status || '').replace(/^we are /i, ''))],
+      [12, 500, 'var(--lido)', (LIDO.estimate != null && LIDO.estimate_date !== LIDO.date ? 'Water ~' + Math.floor(LIDO.estimate) + '° · ' : 'Water ') + LIDO.lido + '° on ' + lidoDay],
       [10.5, 400, 'var(--muted)', LIDO.hours.season + ' hours until ' + new Date(LIDO.hours.until + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })]];
     LIDO.hours.sessions.forEach(function (q) { info.push([12, 500, 'var(--fg)', q.name ? q.name + ' ' + q.open + '–' + q.last : 'Open ' + q.open + ' · last entry ' + q.last]); });
     if (one) info.push([12, 500, 'var(--fg)', 'Out of water by ' + one.out]);
@@ -490,13 +474,6 @@ function drawWeek(d) {
   lab.innerHTML = 'Rain<small>bars mm/h · line chance %</small>';
   lab.style.left = (box.right + 5) + 'px';
   lab.style.top = (box.top + (DIVY + 4) * ZOOM) + 'px';
-  // two tags pinned to the screen over the top panel: time and night at its bottom left, Lido at its top right (hidden while the crosshair's tag is shown)
-  [['nowtag', rows, 'left:' + (box.right + 4 * ZOOM) + 'px;top:' + (box.top + (T + ihU - rows.length * 17 - 13) * ZOOM) + 'px'],
-   ['lidotag', lido, 'right:' + (document.documentElement.clientWidth - document.getElementById('axR').getBoundingClientRect().left + 4 * ZOOM) + 'px;top:' + (box.top + (T + 4) * ZOOM) + 'px' + (CROSS ? ';visibility:hidden' : '')]].forEach(function (t, k) {
-    var el = document.getElementById(t[0]);
-    el.innerHTML = t[1].map(function (r, i) { return '<div style="color:' + r[0] + (k || i ? '' : ';font-weight:700') + '">' + r[1] + '</div>'; }).join('');
-    el.style.cssText = t[2] + ';font-size:' + (14 * ZOOM) + 'px;line-height:' + (17 * ZOOM) + 'px';
-  });
   // day banner above the plot; the name stays pinned at the left while that day is on screen
   document.getElementById('days').innerHTML = d.DAYS.map(function (day, k) {
     var hours = (k + 1) * 24 - Math.max(k * 24, H0), w = hours * PXH;   // the first day only runs from the first hour drawn
@@ -513,7 +490,6 @@ function drawCross() {
   var v = VIEW, g = document.getElementById('wxcross'), gl = document.getElementById('axLcross'), gr = document.getElementById('axRcross');
   if (!v || !g) return;
   if (CROSS && (CROSS.i < v.H0 || CROSS.i >= v.n)) CROSS = null;
-  document.getElementById('lidotag').style.visibility = CROSS ? 'hidden' : '';   // the crosshair's tag can sit there
   if (!CROSS) { g.innerHTML = gl.innerHTML = gr.innerHTML = ''; return; }
   var d = v.d, i = CROSS.i, cx = v.x(i), bot = v.T + v.ih, cy = Math.min(bot, Math.max(v.T, CROSS.y)), h = i % 24, mono = v.mono;
   var o = '<line x1="' + cx + '" x2="' + cx + '" y1="' + v.T + '" y2="' + bot + '" stroke="var(--fg)" stroke-width="1"/>' +
