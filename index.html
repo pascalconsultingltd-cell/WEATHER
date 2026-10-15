@@ -73,7 +73,7 @@ html, body { height:100%; overflow:hidden; background:var(--surface); }
 /* only shown when the forecast cannot be loaded */
 .status { position:fixed; z-index:1; left:8px; right:8px; top:calc(34px + env(safe-area-inset-top)); margin:0; padding:6px 8px; border-radius:6px; background:var(--warn-soft); color:var(--warn); font:400 12px var(--font-data); }
 .status:empty { display:none; }
-/* title of the rain panel, pinned to its top-left corner while the chart scrolls underneath */
+/* title of the rain panel, pinned to its bottom-left corner while the chart scrolls underneath */
 .rainlab { position:fixed; z-index:1; pointer-events:none; white-space:nowrap; color:#0b3d91; font:700 14px var(--font-display); text-shadow:0 0 3px var(--surface), 0 0 3px var(--surface); }
 .rainlab small { margin-left:5px; color:var(--muted); font:400 10px var(--font-data); }
 /* gust, temperature and Lido figures, pinned at the left of the plot at their heights while the chart slides (see placeNow) */
@@ -103,7 +103,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-15e';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-15f';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.26;          // share of the panels' height given to the rain panel at the bottom (temperature and wind share the rest equally)
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -423,9 +423,9 @@ function drawWeek(d) {
   // the time now at the foot of the now line, just above the hours
   out += '<text x="' + nx + '" y="' + (T + ihU - 19) + '" text-anchor="middle" font-size="12" font-weight="700" fill="var(--fg)" stroke="var(--surface)" stroke-width="3" paint-order="stroke" ' + mono + '>' + fmt(d.NOW - d.TODAY * 24) + '</text>';
   function at(arr) { var i = Math.floor(d.NOW), f = d.NOW - i, b = arr[Math.min(n - 1, i + 1)]; return Math.round(arr[i] + (b - arr[i]) * f); }
-  // rain right now, left of the now line, low in the panel: chance, then the amount in this hour
-  var ry = RB - 6 - SFS * 0.95;
-  if (step * 24 >= 50 && ry - SFS > RTOP) [[RC, at(RAIN) + '%'], [MARINE, MM[Math.floor(d.NOW)] + KMH.replace('km/h', 'mm/h')]].forEach(function (f, k) {
+  // rain right now, left of the now line, at the top of the panel: chance, then the amount in this hour
+  var ry = RTOP + 4 + SFS * 0.8;
+  if (step * 24 >= 50 && ry + SFS < RB) [[RC, at(RAIN) + '%'], [MARINE, MM[Math.floor(d.NOW)] + KMH.replace('km/h', 'mm/h')]].forEach(function (f, k) {
     out += '<text x="' + (nx - 2) + '" y="' + (ry + k * SFS * 0.95) + '" fill="' + f[0] + '" ' + BIG + ' style="font-size:' + SFS + 'px;text-anchor:end">' + f[1] + '</text>';
   });
   // After the last day, a column of Lido practical details from lido.json: open or closed, today's hours, sauna sessions
@@ -463,7 +463,7 @@ function drawWeek(d) {
   var lab = document.getElementById('rainlab'), box = document.getElementById('axL').getBoundingClientRect();
   lab.innerHTML = 'Rain<small>bars mm/h · line chance %</small>';
   lab.style.left = (box.right + 5) + 'px';
-  lab.style.top = (box.top + (RTOP + 1) * ZOOM) + 'px';
+  lab.style.top = (box.top + (RB - 17) * ZOOM) + 'px';
   // day banner above the plot; the name stays pinned at the left while that day is on screen
   document.getElementById('days').innerHTML = d.DAYS.map(function (day, k) {
     var hours = (k + 1) * 24 - Math.max(k * 24, H0), w = hours * PXH;   // the first day only runs from the first hour drawn
