@@ -20,7 +20,7 @@
   --line: #d3dde4;
   --accent: #1d6e8c; --lido: #0a9fe6;
   --accent-soft: #d9ecf3;
-  --wind: #14b24c;
+  --wind: #2a72b8;
   --temp: #f07a00;
   --rain: #2f6fd1;
   --night: #0a4a96;
@@ -38,14 +38,14 @@
   :root:not([data-theme="light"]) {
     --bg: #0e1a22; --surface: #162630; --fg: #e5eef3; --muted: #92a6b3;
     --line: #28404d; --accent: #62bcdb; --lido: #4cc9ff; --accent-soft: #1b3a47;
-    --wind: #3ddc84; --temp: #ffa033; --rain: #8fb0ff; --night: #2f78c8; --hol: #ff8fd6;
+    --wind: #6fb0e8; --temp: #ffa033; --rain: #8fb0ff; --night: #2f78c8; --hol: #ff8fd6;
     --warn: #e59a62; --warn-soft: #3a2a1d; --school: #9db4f0; --weekend: #6e5a10; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #0e1a22; --surface: #162630; --fg: #e5eef3; --muted: #92a6b3;
   --line: #28404d; --accent: #62bcdb; --lido: #4cc9ff; --accent-soft: #1b3a47;
-  --wind: #3ddc84; --temp: #ffa033; --rain: #8fb0ff; --night: #2f78c8; --hol: #ff8fd6;
+  --wind: #6fb0e8; --temp: #ffa033; --rain: #8fb0ff; --night: #2f78c8; --hol: #ff8fd6;
   --warn: #e59a62; --warn-soft: #3a2a1d; --school: #9db4f0; --weekend: #6e5a10; color-scheme: dark;
 }
 
@@ -99,7 +99,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-15s';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-15t';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.208;         // share of the panels' height given to the rain panel at the top (temperature and wind share the rest)
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -354,7 +354,7 @@ function drawWeek(d) {
     var heads = Math.max(1, Math.min(ARROW_MAX, Math.floor((WIND[i] + gv) / 2 / ARROW_STEP))), head = '';
     for (var k = 0; k < heads; k++) head += ' M-3,' + (3.2 * k - 1.5) + ' L0,' + (3.2 * k - 5.5) + ' L3,' + (3.2 * k - 1.5);   // each head 3.2 behind the last
     function arrow(ay) {
-      out += '<g transform="translate(' + x(i) + ',' + ay + ') rotate(' + (DIR[i] + 180) + ')" stroke="#06501f" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M0,' + Math.max(5, 3.2 * heads - 3.1) + ' L0,-5' + head + '"/></g>';
+      out += '<g transform="translate(' + x(i) + ',' + ay + ') rotate(' + (DIR[i] + 180) + ')" stroke="#123f73" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M0,' + Math.max(5, 3.2 * heads - 3.1) + ' L0,-5' + head + '"/></g>';
     }
     for (var q = 1; q <= heads; q++) {
       var ay = Math.max(WT + 8, yW(gv) + (yW(WIND[i]) - yW(gv)) * q / (heads + 1));
