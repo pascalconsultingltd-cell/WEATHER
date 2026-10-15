@@ -99,12 +99,11 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-15t';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-16a';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.208;         // share of the panels' height given to the rain panel at the top (temperature and wind share the rest)
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
-var STRONG = 25;                 // km/h: the wind/gust band is drawn darker above this level
-var ARROW_STEP = 10, ARROW_MAX = 4;   // wind arrows: one more per ARROW_STEP km/h of the wind and gust average (under 20: 1, 20-30: 2, 30-40: 3), at most ARROW_MAX
+var BARB_ROW = 105;              // chart units at the foot of the panel for the row of wind barbs and their figures
 var NOW_ROOM = 64;               // chart units kept left of the now line in the "Now" view, for the figures beside it
 var PAST_HOURS = 10;             // hours before now at the left edge when the app opens (room for the figures beside the now line)
 var BACK_HOURS = 16;             // how far before now the chart can be dragged back
@@ -139,10 +138,7 @@ function drawWeek(d) {
   var HOME = Math.max(0, Math.floor(d.NOW) - PAST_HOURS), H0 = Math.max(0, Math.floor(d.NOW) - BACK_HOURS), X0 = H0 * step;   // hour at the left edge on opening; first hour drawn
   // how often things are drawn, so they never overlap when the time axis is squeezed
   function every(list, min) { for (var q = 0; q < list.length - 1 && list[q] * step < min; q++); return list[q]; }
-  var IK = every([1, 2, 3, 4, 6, 8, 12, 24], 34), HK = every([1, 2, 3, 6, 12], 18), AK = every([1, 2, 3, 4, 6, 8, 12], 12);   // sky icons, hour labels, wind arrows
-  // wind and temperature share the panel, set on the week from the first hour drawn so nothing leaves it when the chart
-  // slides: the strongest gust reaches 55% of its height, temperature runs from 38% to 80% (the fraction goes above it)
-  var WMAX = Math.max(20, Math.max.apply(null, GUST.slice(H0)) / 0.55);
+  var IK = every([1, 2, 3, 4, 6, 8, 12, 24], 34), HK = every([1, 2, 3, 6, 12], 18), BK = every([1, 2, 3, 4, 6, 8, 12, 24], 44);   // sky icons, hour labels, wind barbs
   var RMAX = Math.min(100, Math.max(30, Math.ceil(Math.max.apply(null, RAIN) / 30) * 30));
   var MMAX = [1, 2, 4, 6, 10, 20, 40].filter(function (m) { return m >= Math.max.apply(null, MM); })[0] || 80;   // mm scale of the rain bars
   // Lido water temperature for each day on the chart: today's figure, then each later day moves 0.17 of the way towards
@@ -158,7 +154,9 @@ function drawWeek(d) {
     });
   }
   var wt = TEMP.slice(H0).concat(FEEL.slice(H0), POOL.slice(Math.floor(H0 / 24))), tLo = Math.min.apply(null, wt);   // the feels-like and Lido curves too
-  var TMIN = tLo - 0.38 * (Math.max(Math.max.apply(null, wt), tLo + 4) - tLo) / 0.42, TMAX = TMIN + (tLo - TMIN) / 0.38;   // at least 4 degrees across
+  // temperature is set on the week from the first hour drawn, so nothing leaves the panel when the chart slides: the coldest
+  // value just above the row of wind barbs, the warmest at 80% of the height (the fraction goes above), at least 4 degrees across
+  var TLO = (BARB_ROW + 8) / (WF - TT), TSPAN = (Math.max(Math.max.apply(null, wt), tLo + 4) - tLo) / (0.8 - TLO), TMIN = tLo - TLO * TSPAN, TMAX = TMIN + TSPAN;
   var GOLD = '#e0a800', GREY = '#7d8993';
   var RC = RAIN_STYLE === 'drops' ? GREY : 'var(--rain)';   // rain colour
   var mono = 'font-family="DM Mono, monospace"';
@@ -166,11 +164,10 @@ function drawWeek(d) {
   var HALO = 'stroke="var(--surface)" stroke-opacity="0.75" stroke-linejoin="round" stroke-linecap="round"', BIG = 'text-anchor="middle" font-size="' + FS + '" font-weight="700" stroke-width="4" paint-order="stroke" ' + HALO + ' ' + mono;
   var WIDE = step * 24 >= 130, SFS = FS * (WIDE ? 0.8 : 0.55), KMH = '<tspan dx="1.5" style="font-size:' + Math.max(7, SFS * 0.4) + 'px">km/h</tspan>';   // a day is wide enough for big figures beside its fraction; size of the Lido and peak gust figures
   function x(i) { return (i + 0.5) * step; }
-  // Sliding on an axis stretches the temperature and wind scales alike: each stretches from the floor by VS and moves by VO0
-  // (VO is kept relative to the wind floor, where the axis gestures anchor)
+  function windColour(g) { return g >= 39 ? '#D85A30' : g >= 29 ? '#BA7517' : g >= 20 ? '#3B6D11' : 'var(--wind)'; }   // by gust: strong, windy, breezy, light
+  // Sliding on an axis stretches the temperature scale from the floor by VS and moves it by VO0
+  // (VO is kept relative to the floor, where the axis gestures anchor)
   var VO0 = VO - WF * (1 - VS);
-  function yW(v) { return WF - VS * (v / WMAX) * TH + VO0; }
-  function vW(y) { return (WF + VO0 - y) / VS / TH * WMAX; }                         // wind speed at a height
   function yT(v) { return TF - VS * ((v - TMIN) / (TMAX - TMIN)) * TH + VO0; }
   function vT(y) { return TMIN + (TF + VO0 - y) / VS / TH * (TMAX - TMIN); }         // temperature at a height
   function yR(v) { return RTOP + (v / RMAX) * RH; }   // rain grows downwards from the top of its panel
@@ -273,37 +270,18 @@ function drawWeek(d) {
   for (var k = 1; k < d.SUN.length; k++) {
     out += '<line x1="' + (k * 24 * step) + '" x2="' + (k * 24 * step) + '" y1="0" y2="' + H + '" stroke="var(--line)" stroke-width="1"/>';
   }
-  // a wind label every 10 km/h, a temperature label and a faint dashed gold gridline every 2 degrees
-  // (20 and 4, 40 and 8... once a squeeze brings them closer than 14)
+  // a temperature label and a faint dashed gold gridline every 2 degrees (4, 8... once a squeeze brings them closer than 14)
   out += '<line x1="0" x2="' + W + '" y1="' + (T + ihU) + '" y2="' + (T + ihU) + '" stroke="var(--line)" stroke-width="1"/>';
-  for (var ws = 10; yW(0) - yW(ws) < 14; ws *= 2);
-  for (var wv = Math.ceil(Math.max(0, vW(WF)) / ws - 1e-6) * ws; wv <= vW(WT) + 1e-6; wv += ws) {
-    axL += '<text x="21" y="' + (yW(wv) + 4) + '" text-anchor="end" font-size="11" fill="var(--wind)" ' + mono + '>' + wv + '</text>';
-  }
   for (var ts = 2; yT(0) - yT(ts) < 14; ts *= 2);
   for (var tv = Math.ceil(vT(TF) / ts - 1e-6) * ts; tv <= vT(TT) + 1e-6; tv += ts) {   // the whole height of the panel; blue at 0° and below
     var tc = tv <= 0 ? '#2a7de1' : GOLD;
     out += '<line x1="0" x2="' + W + '" y1="' + yT(tv) + '" y2="' + yT(tv) + '" stroke="' + tc + '" stroke-opacity="0.35" stroke-width="1" stroke-dasharray="4 4"/>';
     axR += '<text x="4" y="' + (yT(tv) + 4) + '" text-anchor="start" font-size="11" fill="' + tc + '" ' + mono + '>' + tv + '°</text>';
   }
-  var wp = WIND.map(function (v, i) { return [x(i), yW(v)]; });
-  var gp = GUST.map(function (v, i) { return [x(i), yW(v)]; });
   var rp = RAIN.map(function (v, i) { return [x(i), yR(v < 5 ? 0 : v)]; });   // no fill below 5%
   var tp = TEMP.map(function (v, i) { return [x(i), yT(v)]; });
-  // light windy-blue band between the wind curve and the gust curve
-  // a scale chosen on an axis can leave part of a curve outside its panel, so the curves are clipped to it
-  out += '<clipPath id="wxW"><rect x="0" y="' + (WT - 1) + '" width="' + W + '" height="' + (TH + 3) + '"/></clipPath>';
+  // a scale chosen on an axis can leave part of a curve outside the panel, so the curves are clipped to it
   out += '<clipPath id="wxT"><rect x="0" y="' + (TT - 1) + '" width="' + W + '" height="' + (TH + 2) + '"/></clipPath>';
-  out += '<path d="' + curve(gp) + curve(wp.slice().reverse(), true) + ' Z" fill="#4a90c8" fill-opacity="0.18" stroke="none" clip-path="url(#wxW)"/>';
-  // darker where the band rises above the STRONG level
-  var yS = yW(STRONG);
-  var gy1 = yW(STRONG), gy2 = yW(100);   // 100 km/h sits far above the plot, so the band only reaches the first part of the ramp
-  // ramp: [km/h above STRONG, colour, opacity]; fast early darkening so 5 km/h over STRONG is already visible
-  var RAMP = [[0, '#4a90c8', 0], [5, '#3a80bf', 0.55], [15, '#2a67a6', 0.8], [35, '#173f73', 0.92], [100 - STRONG, '#06152a', 0.98]];
-  var stops = RAMP.map(function (r) { return '<stop offset="' + (r[0] / (100 - STRONG)) + '" style="stop-color:' + r[1] + '" stop-opacity="' + r[2] + '"/>'; }).join('');
-  out += '<defs><linearGradient id="wxg" gradientUnits="userSpaceOnUse" x1="0" y1="' + gy1 + '" x2="0" y2="' + gy2 + '">' + stops + '</linearGradient></defs>';
-  out += '<clipPath id="wxstrong"><rect x="0" y="' + WT + '" width="' + W + '" height="' + Math.max(0, Math.min(TH, yS - WT)) + '"/></clipPath>';
-  out += '<path clip-path="url(#wxstrong)" d="' + curve(gp) + curve(wp.slice().reverse(), true) + ' Z" fill="url(#wxg)" stroke="none"/>';
   // gold band between the temperature curve and the feels-like curve, darker where it rises above the WARM level
   var fp = FEEL.map(function (v, i) { return [x(i), yT(v)]; }), yH = yT(WARM), feelBand = curve(tp) + curve(fp.slice().reverse(), true) + ' Z';
   out += '<path d="' + feelBand + '" fill="' + GOLD + '" fill-opacity="0.18" stroke="none" clip-path="url(#wxT)"/>';
@@ -338,8 +316,6 @@ function drawWeek(d) {
   });
   out += divider();
   drawMoons();
-  out += '<path d="' + curve(gp) + '" fill="none" stroke="var(--wind)" stroke-width="2.1" stroke-linecap="round" clip-path="url(#wxW)"/>';
-  out += '<path d="' + curve(wp) + '" fill="none" stroke="var(--wind)" stroke-width="1.6" stroke-linecap="round" clip-path="url(#wxW)"/>';
   // rain line follows the edge of the fill right up to the axis; the clip hides the flat stretches lying on the axis
   if (RAIN_STYLE !== 'bars') {
     out += '<clipPath id="wxrainline"><rect x="0" y="' + (RTOP + 1.2) + '" width="' + W + '" height="' + (RH + 2) + '"/></clipPath>';
@@ -347,29 +323,29 @@ function drawWeek(d) {
   }
   out += '<path d="' + curve(fp) + '" fill="none" stroke="' + GOLD + '" stroke-width="1.6" stroke-linecap="round" clip-path="url(#wxT)"/>';
   out += '<path d="' + curve(tp) + '" fill="none" stroke="' + GOLD + '" stroke-width="2.1" stroke-linecap="round" clip-path="url(#wxT)"/>';
-  // wind-direction arrows, with one to ARROW_MAX heads by the average of wind and gust: as many arrows as heads, spread evenly
-  // between the wind and gust curves
-  GUST.forEach(function (gv, i) {
-    if (i % AK || i < H0) return;
-    var heads = Math.max(1, Math.min(ARROW_MAX, Math.floor((WIND[i] + gv) / 2 / ARROW_STEP))), head = '';
-    for (var k = 0; k < heads; k++) head += ' M-3,' + (3.2 * k - 1.5) + ' L0,' + (3.2 * k - 5.5) + ' L3,' + (3.2 * k - 1.5);   // each head 3.2 behind the last
-    function arrow(ay) {
-      out += '<g transform="translate(' + x(i) + ',' + ay + ') rotate(' + (DIR[i] + 180) + ')" stroke="#123f73" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M0,' + Math.max(5, 3.2 * heads - 3.1) + ' L0,-5' + head + '"/></g>';
-    }
-    for (var q = 1; q <= heads; q++) {
-      var ay = Math.max(WT + 8, yW(gv) + (yW(WIND[i]) - yW(gv)) * q / (heads + 1));
-      if (ay <= T + ihU - 4) arrow(ay);   // unless the curves are below the panel here
-    }
-  });
-  // per-day labels: peak gust, highest rain chance and amount (the temperature highs and lows are in the big fraction)
+  // wind as a row of barbs at the foot of the panel, one every BK hours: the dot is the place, the staff points to where the
+  // wind comes from, the feathers give the mean wind (long 10 kt, short 5 kt, triangle 50 kt); coloured by the gust
+  // (blue light, green breezy, amber windy, orange strong), mean and gust in km/h under it unless the time now is there
+  var BY = WF - BARB_ROW + 40;   // the barbs' dots
+  for (var i = H0; i < n; i++) {
+    if (i % BK || x(i) < X0 + 12) continue;
+    var kt = Math.round(WIND[i] / 1.852 / 5) * 5, bc = windColour(GUST[i]), fy = -30, f = '';
+    for (; kt >= 50; kt -= 50, fy += 11) f += '<path d="M0,' + fy + ' L13,' + (fy + 4) + ' L0,' + (fy + 9) + 'Z" fill="' + bc + '"/>';
+    for (; kt >= 10; kt -= 10, fy += 6) f += '<path d="M0,' + fy + ' L14,' + (fy - 7) + '"/>';
+    if (kt >= 5) f += '<path d="M0,' + (fy === -30 ? -24 : fy) + ' L8,' + ((fy === -30 ? -24 : fy) - 4) + '"/>';
+    out += '<g transform="translate(' + x(i) + ',' + BY + ') rotate(' + DIR[i] + ')" stroke="' + bc + '" stroke-width="2" fill="none" stroke-linecap="round"><path d="M0,0 L0,-30"/>' + f + '</g>';
+    out += '<circle cx="' + x(i) + '" cy="' + BY + '" r="3" fill="' + bc + '"/>';
+    if (Math.abs(x(i) - x(0) - d.NOW * step) > 24) out += '<text x="' + x(i) + '" y="' + (BY + 44) + '" text-anchor="middle" font-size="12" font-weight="700" fill="' + bc + '" stroke="var(--surface)" stroke-width="3" paint-order="stroke" ' + mono + '>' + WIND[i] +
+      '<tspan font-size="10" font-weight="500" fill="var(--muted)"> ' + GUST[i] + '</tspan></text>';
+  }
+  // per-day labels: highest rain chance and amount (the temperature highs and lows are in the big fraction)
   function fmt(t) { var h = Math.floor(t), m = Math.round((t - h) * 60); if (m === 60) { h++; m = 0; } return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m; }
   d.SUN.forEach(function (s, k) {
-    var a = k * 24, g = GUST.slice(a, a + 24), mg = Math.max.apply(null, g);
+    var a = k * 24;
     // the rain panel has no scale: each day's highest chance and highest amount sit under the fill at the hour of that chance
     var r = RAIN.slice(a, a + 24), mr = Math.max.apply(null, r), mm = Math.max.apply(null, MM.slice(a, a + 24)), ir = a + r.indexOf(mr);
     if (mr >= 5 && ir >= H0) out += '<text x="' + x(ir) + '" y="' + Math.min(RB - 4, yR(mr) + SFS * 0.8 + 3) + '" fill="' + RC + '" ' + BIG + ' style="font-size:' + Math.max(7, SFS * 2 / 3) + 'px">' + mr + '%' +
       (mm ? ' <tspan fill="' + MARINE + '">' + mm + KMH.replace('km/h', 'mm/h') + '</tspan>' : '') + '</text>';
-    if (a + g.indexOf(mg) >= H0 && yW(mg) - 20 < T + ihU) out += '<text x="' + x(a + g.indexOf(mg)) + '" y="' + Math.max(WT + SFS * 0.8, yW(mg) - 6) + '" fill="var(--wind)" ' + BIG + ' style="font-size:' + Math.max(9, SFS) + 'px">' + mg + KMH + '</text>';
     // sunrise and sunset: a small icon on the day/night boundary in the strip at the top, the time under it
     s.forEach(function (v, j) {
       if (xt(a + v) < X0 + 13 || (s[1] - s[0]) * step < 30) return;   // would be cut by the left edge, or the two would collide
@@ -442,8 +418,8 @@ function drawWeek(d) {
   size('wxchart', X0, W - X0 + INFO).innerHTML = out + '<g id="wxcross"></g>';
   size('axL', 0, AL).innerHTML = axL + '<g id="axLcross"></g>';
   size('axR', 0, AR).innerHTML = axR + '<g id="axRcross"></g>';
-  VIEW = { d: d, n: n, step: step, W: W, T: T, ih: ih, ihU: ihU, RTOP: RTOP, RB: RB, TT: TT, TF: TF, WT: WT, H0: H0, X0: X0, x: x, yW: yW, yT: yT, yR: yR,
-    HOME: HOME, POOL: POOL, SFS: SFS, vW: vW, vT: vT, RMAX: RMAX, MMAX: MMAX, MARINE: MARINE, TMIN: TMIN, TMAX: TMAX, GOLD: GOLD, RC: RC, mono: mono };
+  VIEW = { d: d, n: n, step: step, W: W, T: T, ih: ih, ihU: ihU, RTOP: RTOP, RB: RB, TT: TT, TF: TF, WT: WT, H0: H0, X0: X0, x: x, yT: yT, yR: yR,
+    HOME: HOME, POOL: POOL, SFS: SFS, vT: vT, windColour: windColour, RMAX: RMAX, MMAX: MMAX, MARINE: MARINE, TMIN: TMIN, TMAX: TMAX, GOLD: GOLD, RC: RC, mono: mono };
   drawCross();
   // day banner above the plot; the name stays pinned at the left while that day is on screen
   document.getElementById('days').innerHTML = d.DAYS.map(function (day, k) {
@@ -457,8 +433,8 @@ function drawWeek(d) {
   placeNow();
 }
 
-// Gust and temperature figures are pinned at the left edge of the plot: they read the curves where they cross that edge,
-// sit just above them and follow them as the chart slides (pushed apart where they would overlap). The Lido figure, two
+// Temperature and gust figures are pinned at the left edge of the plot: they read the hour at that edge and follow the
+// chart as it slides, the temperature just above its curve, the gust (coloured like the barbs) just above the row of barbs. The Lido figure, two
 // little waves and the water temperature, is pinned at the right edge at its level and follows the day at that edge.
 // The rain chance and amount at that hour sit side by side at the top of the rain panel, two thirds the size.
 function placeNow() {
@@ -467,8 +443,7 @@ function placeNow() {
   var d = v.d, S = v.SFS, h = Math.max(0, Math.min(v.n - 1.001, v.X0 / v.step + document.querySelector('.scroll').scrollLeft / PXH - 0.5));
   function at(arr) { var i = Math.floor(h); return Math.round(arr[i] + (arr[i + 1] - arr[i]) * (h - i)); }
   var kmh = '<small>km/h</small>', k = Math.min(v.POOL.length - 1, Math.max(d.TODAY, Math.floor((h + PLOTW / PXH) / 24)));
-  var f = [[v.yW(at(d.GUST)) - 5, 'var(--wind)', at(d.GUST) + kmh], [v.yT(at(d.TEMP)) - 5, v.GOLD, at(d.TEMP) + '°']];
-  f.sort(function (p, q) { return p[0] - q[0]; }).forEach(function (q, j) { if (j) q[0] = Math.max(q[0], f[j - 1][0] + S * 0.95); });
+  var f = [[v.yT(at(d.TEMP)) - 5, v.GOLD, at(d.TEMP) + '°'], [v.T + v.ihU - 112, v.windColour(at(d.GUST)), at(d.GUST) + kmh]];   // the gust sits above the barbs
   if (v.POOL.length) f.push([v.yT(v.POOL[k]) + S * 0.3, 'var(--lido)', '<svg width="' + 13 * ZOOM + '" height="' + 8 * ZOOM + '" viewBox="-0.5 -5 16 10"><path d="M0,-2.5 q2.5,-3 5,0 t5,0 t5,0 M0,2.5 q2.5,-3 5,0 t5,0 t5,0" fill="none" stroke="var(--lido)" stroke-width="1.8" stroke-linecap="round"/></svg>' + Math.floor(v.POOL[k] + 1e-6) + '°', 1]);
   var box = document.getElementById('axL').getBoundingClientRect();
   el.style.cssText = 'left:' + box.right + 'px;top:' + box.top + 'px;width:' + PLOTW + 'px';
@@ -488,8 +463,7 @@ function drawCross() {
   var d = v.d, i = CROSS.i, cx = v.x(i), bot = v.T + v.ih, cy = Math.min(bot, Math.max(v.T, CROSS.y)), h = i % 24, mono = v.mono;
   var o = '<line x1="' + cx + '" x2="' + cx + '" y1="' + v.T + '" y2="' + bot + '" stroke="var(--fg)" stroke-width="1"/>' +
     '<line x1="' + v.X0 + '" x2="' + v.W + '" y1="' + cy + '" y2="' + cy + '" stroke="var(--fg)" stroke-width="0.7" stroke-opacity="0.6"/>';
-  [[v.yW(d.GUST[i]), 'var(--surface)', 'var(--wind)'], [v.yW(d.WIND[i]), 'var(--wind)', 'var(--surface)'],
-   [v.yT(d.FEEL[i]), 'var(--surface)', v.GOLD], [v.yT(d.TEMP[i]), v.GOLD, 'var(--surface)'], [v.yR(d.RAIN[i]), v.RC, 'var(--surface)', 1]].forEach(function (p) {
+  [[v.yT(d.FEEL[i]), 'var(--surface)', v.GOLD], [v.yT(d.TEMP[i]), v.GOLD, 'var(--surface)'], [v.yR(d.RAIN[i]), v.RC, 'var(--surface)', 1]].forEach(function (p) {
     if (p[3] || (p[0] >= v.T - 1 && p[0] <= v.T + v.ihU + 1)) o += '<circle cx="' + cx + '" cy="' + p[0] + '" r="3.4" fill="' + p[1] + '" stroke="' + p[2] + '" stroke-width="1.4"/>';
   });
   var rows = [
@@ -514,9 +488,8 @@ function drawCross() {
     return '<rect x="' + xa + '" y="' + (cy - 6.5) + '" width="' + w + '" height="13" rx="2" fill="var(--surface)" stroke="' + col + '" stroke-width="0.7"/>' +
       '<text x="' + (xa + w / 2) + '" y="' + (cy + 3.7) + '" text-anchor="middle" font-size="10.5" font-weight="700" fill="' + col + '" ' + mono + '>' + txt + '</text>';
   }
-  // temperature reads on the right axis, wind on the left; in the rain panel, amount left and chance right
-  gl.innerHTML = cy >= v.WT && cy <= v.T + v.ihU ? chip(1, 24, Math.round(v.vW(cy)), 'var(--wind)')
-    : cy >= v.RTOP && cy <= v.RB ? chip(1, 24, ((cy - v.RTOP) / (v.RB - v.RTOP) * v.MMAX).toFixed(1), v.MARINE) : '';
+  // temperature reads on the right axis; in the rain panel, amount left and chance right
+  gl.innerHTML = cy >= v.RTOP && cy <= v.RB ? chip(1, 24, ((cy - v.RTOP) / (v.RB - v.RTOP) * v.MMAX).toFixed(1), v.MARINE) : '';
   gr.innerHTML = cy >= v.TT && cy <= v.TF ? chip(1, 31, Math.round(v.vT(cy)) + '°', v.GOLD)
     : cy >= v.RTOP && cy <= v.RB ? chip(1, 31, Math.round((cy - v.RTOP) / (v.RB - v.RTOP) * v.RMAX) + '%', v.RC) : '';
 }
