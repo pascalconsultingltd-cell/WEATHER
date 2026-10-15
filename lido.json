@@ -5,8 +5,8 @@
   "ladies": 13,
   "mens": 15,
   "mixed": 14,
-  "estimate": 15.7,
-  "estimate_date": "2026-10-14",
+  "estimate": 16.2,
+  "estimate_date": "2026-10-15",
   "status": "we are open as usual",
   "hours": {
     "season": "Winter",
@@ -20,5 +20,5 @@
       }
     ]
   },
-  "sauna": "opens mid-October"
+  "sauna": "7am, 8am, 9am, 10am, 11am, 12pm"
 }
