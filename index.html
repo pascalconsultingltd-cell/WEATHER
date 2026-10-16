@@ -99,7 +99,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-16n';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-16o';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.208;         // share of the panels' height given to the rain panel at the top (temperature and wind share the rest)
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -284,21 +284,29 @@ function drawWeek(d) {
   var tp = TEMP.map(function (v, i) { return [x(i), yT(v)]; });
   // a scale chosen on an axis can leave part of a curve outside the panel, so the curves are clipped to it
   out += '<clipPath id="wxT"><rect x="0" y="' + (TT - 1) + '" width="' + W + '" height="' + (TH + 2) + '"/></clipPath>';
-  out += '<path d="' + curve(wUp) + curve(wDown.slice().reverse(), true) + ' Z" fill="#4a90c8" fill-opacity="0.12"/>';
+  var funnel = curve(wUp) + curve(wDown.slice().reverse(), true) + ' Z';
+  out += '<clipPath id="wxF"><path d="' + funnel + '"/></clipPath><path d="' + funnel + '" fill="#4a90c8" fill-opacity="0.12"/>';
   [wUp, wDown].forEach(function (e) { out += '<path d="' + curve(e) + '" fill="none" stroke="var(--wind)" stroke-width="1.4"/>'; });
-  // wind-tunnel streamlines inside the funnel: one along the middle and four at a third and two thirds of its width, squeezing together
-  // where the wind drops and spreading where it blows, fainter towards the edges. They are dashed and the dashes drift
-  // left to right, faster the stronger the gust (speed grows with the square of the gust): each 6-hour stretch moves at its own speed
-  [[0, 0.6], [1 / 3, 0.55], [2 / 3, 0.35]].forEach(function (q) {
+  // wind-tunnel streamlines inside the funnel: one along the middle and four at a third and two thirds of its width, squeezing
+  // together where the wind drops and spreading where it blows, fainter towards the edges
+  [[0, 0.45], [1 / 3, 0.4], [2 / 3, 0.25]].forEach(function (q) {
     (q[0] ? [-1, 1] : [1]).forEach(function (sgn) {
-      for (var c = H0; c < n - 1; c += 6) {
-        var g6 = GUST.slice(c, c + 7), pts = g6.map(function (v, j) { return [x(c + j), WY + sgn * q[0] * v / GMAX * WH]; });
-        var gm = g6.reduce(function (p, v) { return p + v; }, 0) / g6.length, dur = Math.min(12, Math.max(0.4, 900 / (gm * gm))).toFixed(2);   // 30 km/h: 1 s, 15: 4 s
-        out += '<path d="' + curve(pts) + '" fill="none" stroke="var(--wind)" stroke-opacity="' + q[1] + '" stroke-width="0.9" stroke-dasharray="5 9">' +
-          '<animate attributeName="stroke-dashoffset" from="0" to="-14" dur="' + dur + 's" repeatCount="indefinite"/></path>';
-      }
+      out += '<path d="' + curve(GUST.map(function (v, i) { return [x(i), WY + sgn * q[0] * v / GMAX * WH]; })) + '" fill="none" stroke="var(--wind)" stroke-opacity="' + q[1] + '" stroke-width="0.9"/>';
     });
   });
+  // moving air: short streaks drift the way the wind blows (as the barbs show), more of them and faster the stronger the
+  // gust (speed grows with its square), fading in and out at scattered times so the flow looks continuous; kept inside the funnel
+  var air = '';
+  for (var ai = H0; ai < n; ai += Math.max(2, Math.ceil(6 / step))) {
+    var ag = GUST[ai] / GMAX, ab = (DIR[ai] + 180) * Math.PI / 180, adx = Math.sin(ab), ady = -Math.cos(ab), adur = Math.min(6, Math.max(0.5, 500 / (GUST[ai] * GUST[ai])));
+    for (var aj = 0; aj < Math.round(ag * 3); aj++) {
+      var ar = ((ai * 37 + aj * 53) % 97) / 97, ax = x(ai) + (((ai * 13 + aj * 29) % 11) / 5.5 - 1) * step, ay = WY + (ar * 2 - 1) * ag * WH * 0.8;
+      air += '<line x1="' + (ax - adx * 7) + '" y1="' + (ay - ady * 7) + '" x2="' + ax + '" y2="' + ay + '" stroke="var(--wind)" stroke-width="1.6" stroke-linecap="round" opacity="0">' +
+        '<animateTransform attributeName="transform" type="translate" from="0 0" to="' + (adx * 16) + ' ' + (ady * 16) + '" dur="' + adur.toFixed(2) + 's" begin="-' + (ar * adur).toFixed(2) + 's" repeatCount="indefinite"/>' +
+        '<animate attributeName="opacity" values="0;0.85;0" dur="' + adur.toFixed(2) + 's" begin="-' + (ar * adur).toFixed(2) + 's" repeatCount="indefinite"/></line>';
+    }
+  }
+  out += '<g clip-path="url(#wxF)">' + air + '</g>';
   // gold band between the temperature curve and the feels-like curve, darker where it rises above the WARM level.
   // The curves and the band shade from blue at 6 degrees and below to gold at 14 and above (10 in between)
   out += '<defs><linearGradient id="wxtg" gradientUnits="userSpaceOnUse" x1="0" x2="0" y1="' + yT(6) + '" y2="' + yT(14) + '"><stop offset="0" stop-color="#2a7de1"/><stop offset="1" stop-color="' + GOLD + '"/></linearGradient></defs>';
