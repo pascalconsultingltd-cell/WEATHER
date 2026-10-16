@@ -99,7 +99,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-16o';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-16p';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.208;         // share of the panels' height given to the rain panel at the top (temperature and wind share the rest)
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -115,7 +115,7 @@ var LIDO_URL = location.protocol.indexOf('http') === 0 ? 'lido.json' : 'https://
 var ICON_BASE = 'https://cdn.jsdelivr.net/gh/basmilius/weather-icons@dev/production/fill/svg-static/';
 var PXH = 0, USER_ZOOM = false, PLOTW = 0;   // screen px per hour (set to fit FIT_HOURS until the user pinches), width of the plot on screen
 var VS = 1, VO = 0;                          // vertical stretch and shift of the wind and temperature scales, set by sliding on an axis (1 and 0 = automatic)
-var HOMED = false;                           // the chart has been placed on "now" once
+var HOMED = false, SLID = 0;                 // the chart has been placed on "now"; when the chart was last slid (ms)
 var VIEW = null, CROSS = null;               // geometry of the last drawing, and the crosshair {i: hour index, y: chart units}
 
 // One continuous chart. d: {WIND, GUST (km/h), RAIN (% chance), MM (mm of rain in the hour), TEMP (C), FEEL (feels-like, C), DIR (bearing wind comes FROM), ICON} per hour from 00:00 on day 0,
@@ -476,7 +476,7 @@ function placeNow() {
   }).join('') + '<div style="left:3px;top:' + (v.RTOP + 4 + S * 0.55) * ZOOM + 'px;color:' + v.RC + ';font-size:' + S * 2 / 3 * ZOOM + 'px">' +
     at(d.RAIN) + '% <span style="color:' + v.MARINE + '">' + d.MM[Math.floor(h)] + '<small>mm/h</small></span></div>';
 }
-document.querySelector('.scroll').addEventListener('scroll', placeNow, { passive: true });
+document.querySelector('.scroll').addEventListener('scroll', function () { SLID = Date.now(); placeNow(); }, { passive: true });
 
 // Crosshair: a line on one hour with that hour's values in a tag beside it, and a level line whose value is read on the axes.
 function drawCross() {
@@ -597,7 +597,11 @@ function load() {
     '&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m,is_day' +
     '&daily=sunrise,sunset&wind_speed_unit=kmh&timezone=' + encodeURIComponent(TZ) + '&forecast_days=' + DAYS + '&past_days=1';   // yesterday too, for the hours before now
   fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-    .then(function (j) { lastLoad = Date.now(); lastData = j; render(j); })
+    .then(function (j) {
+      // a fresh forecast puts the chart back on "now" (the now line at its usual place) unless it was slid in the last 2 minutes
+      if (Date.now() - SLID > 120000) HOMED = false;
+      lastLoad = Date.now(); lastData = j; render(j);
+    })
     .catch(function (e) {
       document.getElementById('status').textContent = 'Could not load forecast (' + e.message + '). Retrying in ' + REFRESH_MIN + ' min.';
     });
