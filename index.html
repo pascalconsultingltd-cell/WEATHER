@@ -99,7 +99,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-16r';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-16s';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.208;         // share of the panels' height given to the rain panel at the top (temperature and wind share the rest)
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -123,9 +123,9 @@ var VIEW = null, CROSS = null;               // geometry of the last drawing, an
 function drawWeek(d) {
   var WIND = d.WIND, GUST = d.GUST, RAIN = d.RAIN, MM = d.MM, TEMP = d.TEMP, FEEL = d.FEEL, DIR = d.DIR, ICON = d.ICON;
   var chartEl = document.getElementById('chart'), AL = 26, AR = 33;
-  PLOTW = chartEl.clientWidth - (AL + AR) * ZOOM;
+  PLOTW = Math.max(60, chartEl.clientWidth - (AL + AR) * ZOOM);   // never negative while the page is still being laid out
   var hr = d.NOW - d.TODAY * 24, dusk = d.SUN[d.TODAY][1];   // "Now" view ends at sunset, or once that has passed an hour after tomorrow's sunrise
-  if (!USER_ZOOM) PXH = FIT_HOURS < 0 ? Math.min(PXH_MAX, (PLOTW - NOW_ROOM * ZOOM) / ((hr < dusk ? dusk : 25 + d.SUN[d.TODAY + 1][0]) - hr))
+  if (!USER_ZOOM) PXH = FIT_HOURS < 0 ? Math.min(PXH_MAX, Math.max(20, PLOTW - NOW_ROOM * ZOOM) / ((hr < dusk ? dusk : 25 + d.SUN[d.TODAY + 1][0]) - hr))
     : PLOTW / (FIT_HOURS || WIND.length - Math.max(0, Math.floor(d.NOW) - PAST_HOURS));   // 0 = from the opening position to the end of the week
   [].forEach.call(document.querySelectorAll('#zoomsel button'), function (b) { b.className = !USER_ZOOM && +b.getAttribute('data-h') === FIT_HOURS ? 'on' : ''; });
   var n = WIND.length, step = PXH / ZOOM, W = n * step, H = Math.max(200, Math.floor((chartEl.clientHeight - 26) / ZOOM)), MT = 0, MOONH = 48, ICY = MOONH + 24, T = MOONH + 58, B = 4, ih = H - T - B;   // sun and moon strip from MT, sky icons centred on ICY
@@ -294,17 +294,16 @@ function drawWeek(d) {
       out += '<path d="' + curve(GUST.map(function (v, i) { return [x(i), WY + sgn * q[0] * v / GMAX * WH]; })) + '" fill="none" stroke="var(--wind)" stroke-opacity="' + q[1] + '" stroke-width="0.9"/>';
     });
   });
-  // moving air: little gusts of wind (a tail ending in a curl, like the usual wind symbol) drift the way the wind blows (as the barbs show), more of them and faster the stronger the
+  // moving air: little gusts of wind (a tail ending in a curl, like the usual wind symbol) drift left to right (the barbs give the direction) (as the barbs show), more of them and faster the stronger the
   // gust (speed grows with its square), fading in and out at scattered times so the flow looks continuous; kept inside the funnel
   var air = '';
   for (var ai = H0; ai < n; ai += Math.max(2, Math.ceil(6 / step))) {
-    var ag = GUST[ai] / GMAX, adeg = DIR[ai] + 90, adur = Math.min(6, Math.max(0.5, 500 / (GUST[ai] * GUST[ai])));
+    var ag = GUST[ai] / GMAX, adur = Math.min(6, Math.max(0.5, 500 / (GUST[ai] * GUST[ai])));
     for (var aj = 0; aj < Math.round(ag * 3); aj++) {
       var ar = ((ai * 37 + aj * 53) % 97) / 97, ax = x(ai) + (((ai * 13 + aj * 29) % 11) / 5.5 - 1) * step, ay = WY + (ar * 2 - 1) * ag * WH * 0.8;
-      // drawn along +x and turned to the way the wind goes (bearing it comes from + 180, so the turn is that bearing + 90);
       // the curl turns up or down in turn
       var cs = aj % 2 ? -1 : 1, curl = 'M-14,0 L2,0 c3.5,0 6,' + (-2 * cs) + ' 6,' + (-5 * cs) + ' c0,' + (-2.5 * cs) + ' -2,' + (-4 * cs) + ' -4,' + (-4 * cs) + ' c-2,0 -3,' + (1.5 * cs) + ' -2.2,' + (3 * cs);
-      air += '<g transform="translate(' + ax + ',' + ay + ') rotate(' + adeg + ')"><path d="' + curl + '" fill="none" stroke="var(--wind)" stroke-width="1.5" stroke-linecap="round" opacity="0">' +
+      air += '<g transform="translate(' + ax + ',' + ay + ')"><path d="' + curl + '" fill="none" stroke="var(--wind)" stroke-width="1.5" stroke-linecap="round" opacity="0">' +
         '<animateTransform attributeName="transform" type="translate" from="-6 0" to="10 0" dur="' + adur.toFixed(2) + 's" begin="-' + (ar * adur).toFixed(2) + 's" repeatCount="indefinite"/>' +
         '<animate attributeName="opacity" values="0;0.85;0" dur="' + adur.toFixed(2) + 's" begin="-' + (ar * adur).toFixed(2) + 's" repeatCount="indefinite"/></path></g>';
     }
