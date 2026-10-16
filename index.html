@@ -99,7 +99,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-16u';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-16v';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.208;         // share of the panels' height given to the rain panel at the top (temperature and wind share the rest)
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -154,8 +154,8 @@ function drawWeek(d) {
   }
   var wt = TEMP.slice(H0).concat(FEEL.slice(H0), POOL.slice(Math.floor(H0 / 24))), tLo = Math.min.apply(null, wt);   // the feels-like and Lido curves too
   // temperature is set on the week from the first hour drawn, so nothing leaves the panel when the chart slides: the coldest
-  // value at 8% of the height, the warmest at 60% (the fraction goes above, then the wind band under the rain), at least 4 degrees across
-  var TSPAN = (Math.max(Math.max.apply(null, wt), tLo + 4) - tLo) / 0.52, TMIN = tLo - 0.08 * TSPAN, TMAX = TMIN + TSPAN;
+  // value at 16% of the height, the warmest at 70% (the wind spreads around the curve, the fraction goes above), at least 4 degrees across
+  var TSPAN = (Math.max(Math.max.apply(null, wt), tLo + 4) - tLo) / 0.54, TMIN = tLo - 0.16 * TSPAN, TMAX = TMIN + TSPAN;
   var GOLD = '#e0a800', GREY = '#7d8993';
   var RC = RAIN_STYLE === 'drops' ? GREY : 'var(--rain)';   // rain colour
   var mono = 'font-family="DM Mono, monospace"';
@@ -166,10 +166,10 @@ function drawWeek(d) {
   // Sliding on an axis stretches the temperature scale from the floor by VS and moves it by VO0
   // (VO is kept relative to the floor, where the axis gestures anchor)
   var VO0 = VO - WF * (1 - VS);
-  // wind is a band between the temperatures and the rain, centred at 76% of the panel's height (WY), its edges as far out as
-  // the gust is strong (the week's strongest gust WH above and below the centre)
-  var WY = WF - 0.76 * TH, WH = 0.13 * TH, GMAX = Math.max(20, Math.max.apply(null, GUST.slice(H0)));
-  var wUp = GUST.map(function (v, i) { return [x(i), WY - v / GMAX * WH]; }), wDown = GUST.map(function (v, i) { return [x(i), WY + v / GMAX * WH]; });
+  // wind is drawn around the middle of the temperature band (wy, between temperature and feels-like), spreading as far out as
+  // the gust is strong (the week's strongest gust WH above and below)
+  var WH = 0.13 * TH, GMAX = Math.max(20, Math.max.apply(null, GUST.slice(H0)));
+  function wy(i) { return (yT(TEMP[i]) + yT(FEEL[i])) / 2; }
   function yT(v) { return TF - VS * ((v - TMIN) / (TMAX - TMIN)) * TH + VO0; }
   function vT(y) { return TMIN + (TF + VO0 - y) / VS / TH * (TMAX - TMIN); }         // temperature at a height
   function yR(v) { return RTOP + (v / RMAX) * RH; }   // rain grows downwards from the top of its panel
@@ -284,15 +284,13 @@ function drawWeek(d) {
   var tp = TEMP.map(function (v, i) { return [x(i), yT(v)]; });
   // a scale chosen on an axis can leave part of a curve outside the panel, so the curves are clipped to it
   out += '<clipPath id="wxT"><rect x="0" y="' + (TT - 1) + '" width="' + W + '" height="' + (TH + 2) + '"/></clipPath>';
-  out += '<path d="' + curve(wUp) + curve(wDown.slice().reverse(), true) + ' Z" fill="#4a90c8" fill-opacity="0.12"/>';
-  [wUp, wDown].forEach(function (e) { out += '<path d="' + curve(e) + '" fill="none" stroke="var(--wind)" stroke-width="1.4"/>'; });
-  // wind-tunnel streamlines inside the funnel: one along the middle and four at a third and two thirds of its width, squeezing together
+  // wind-tunnel streamlines around the temperature band: one along its middle and four at a third and two thirds of the wind's spread, squeezing together
   // where the wind drops and spreading where it blows, fainter towards the edges. They are dashed and the dashes drift
   // left to right, faster the stronger the gust (speed grows with the square of the gust): each 6-hour stretch moves at its own speed
   [[0, 0.6], [1 / 3, 0.55], [2 / 3, 0.35]].forEach(function (q) {
     (q[0] ? [-1, 1] : [1]).forEach(function (sgn) {
       for (var c = H0; c < n - 1; c += 6) {
-        var g6 = GUST.slice(c, c + 7), pts = g6.map(function (v, j) { return [x(c + j), WY + sgn * q[0] * v / GMAX * WH]; });
+        var g6 = GUST.slice(c, c + 7), pts = g6.map(function (v, j) { return [x(c + j), wy(c + j) + sgn * q[0] * v / GMAX * WH]; });
         var gm = g6.reduce(function (p, v) { return p + v; }, 0) / g6.length, dur = Math.min(12, Math.max(0.4, 900 / (gm * gm))).toFixed(2);   // 30 km/h: 1 s, 15: 4 s
         out += '<path d="' + curve(pts) + '" fill="none" stroke="var(--wind)" stroke-opacity="' + q[1] + '" stroke-width="0.9" stroke-dasharray="5 9">' +
           '<animate attributeName="stroke-dashoffset" from="0" to="-14" dur="' + dur + 's" repeatCount="indefinite"/></path>';
@@ -342,12 +340,12 @@ function drawWeek(d) {
   }
   out += '<path d="' + curve(fp) + '" fill="none" stroke="url(#wxtg)" stroke-width="1.6" stroke-linecap="round" clip-path="url(#wxT)"/>';
   out += '<path d="' + curve(tp) + '" fill="none" stroke="url(#wxtg)" stroke-width="2.1" stroke-linecap="round" clip-path="url(#wxT)"/>';
-  // wind barbs along the middle of the wind band, one every BK hours: the dot is the place, the staff points to where the
+  // wind barbs along the middle of the temperature band, one every BK hours: the dot is the place, the staff points to where the
   // wind comes from, the feathers give the mean wind (long 10 kt, short 5 kt, triangle 50 kt); drawn at half size so they
   // fit in the band; the figures are in the crosshair
   for (var i = H0; i < n; i++) {
     if (i % BK || x(i) < X0 + 12) continue;
-    var BY = WY, kt = Math.round(WIND[i] / 1.852 / 5) * 5, bc = 'var(--wind)', fy = -30, f = '';
+    var BY = wy(i), kt = Math.round(WIND[i] / 1.852 / 5) * 5, bc = 'var(--wind)', fy = -30, f = '';
     for (; kt >= 50; kt -= 50, fy += 11) f += '<path d="M0,' + fy + ' L13,' + (fy + 4) + ' L0,' + (fy + 9) + 'Z" fill="' + bc + '"/>';
     for (; kt >= 10; kt -= 10, fy += 6) f += '<path d="M0,' + fy + ' L14,' + (fy - 7) + '"/>';
     if (kt >= 5) f += '<path d="M0,' + (fy === -30 ? -24 : fy) + ' L8,' + ((fy === -30 ? -24 : fy) - 4) + '"/>';
@@ -435,7 +433,7 @@ function drawWeek(d) {
   size('axL', 0, AL).innerHTML = axL + '<g id="axLcross"></g>';
   size('axR', 0, AR).innerHTML = axR + '<g id="axRcross"></g>';
   VIEW = { d: d, n: n, step: step, W: W, T: T, ih: ih, ihU: ihU, RTOP: RTOP, RB: RB, TT: TT, TF: TF, WT: WT, H0: H0, X0: X0, x: x, yT: yT, yR: yR,
-    HOME: HOME, POOL: POOL, SFS: SFS, WY: WY, vT: vT, RMAX: RMAX, MMAX: MMAX, MARINE: MARINE, TMIN: TMIN, TMAX: TMAX, GOLD: GOLD, RC: RC, mono: mono };
+    HOME: HOME, POOL: POOL, SFS: SFS, vT: vT, RMAX: RMAX, MMAX: MMAX, MARINE: MARINE, TMIN: TMIN, TMAX: TMAX, GOLD: GOLD, RC: RC, mono: mono };
   drawCross();
   // day banner above the plot; the name stays pinned at the left while that day is on screen
   document.getElementById('days').innerHTML = d.DAYS.map(function (day, k) {
@@ -450,7 +448,7 @@ function drawWeek(d) {
 }
 
 // Temperature and gust figures are pinned at the left edge of the plot: they read the hour at that edge and follow the
-// chart as it slides, the temperature just above its curve and the gust on the wind band. The Lido figure, two
+// chart as it slides, the temperature just above its curve and the gust just under it. The Lido figure, two
 // little waves and the water temperature, is pinned at the right edge at its level and follows the day at that edge.
 // The rain chance and amount at that hour sit side by side at the top of the rain panel, two thirds the size.
 function placeNow() {
@@ -459,7 +457,7 @@ function placeNow() {
   var d = v.d, S = v.SFS, h = Math.max(0, Math.min(v.n - 1.001, v.X0 / v.step + document.querySelector('.scroll').scrollLeft / PXH - 0.5));
   function at(arr) { var i = Math.floor(h); return Math.round(arr[i] + (arr[i + 1] - arr[i]) * (h - i)); }
   var kmh = '<small>km/h</small>', k = Math.min(v.POOL.length - 1, Math.max(d.TODAY, Math.floor((h + PLOTW / PXH) / 24)));
-  var f = [[v.yT(at(d.TEMP)) - 5, v.GOLD, at(d.TEMP) + '°'], [v.WY - 8, 'var(--wind)', at(d.GUST) + kmh]];   // the gust on the wind band
+  var f = [[v.yT(at(d.TEMP)) - 5, v.GOLD, at(d.TEMP) + '°'], [v.yT(at(d.TEMP)) + S + 4, 'var(--wind)', at(d.GUST) + kmh]];   // the gust just under the temperature
   if (v.POOL.length) f.push([v.yT(v.POOL[k]) + S * 0.3, 'var(--lido)', '<svg width="' + 13 * ZOOM + '" height="' + 8 * ZOOM + '" viewBox="-0.5 -5 16 10"><path d="M0,-2.5 q2.5,-3 5,0 t5,0 t5,0 M0,2.5 q2.5,-3 5,0 t5,0 t5,0" fill="none" stroke="var(--lido)" stroke-width="1.8" stroke-linecap="round"/></svg>' + Math.floor(v.POOL[k] + 1e-6) + '°', 1]);
   var box = document.getElementById('axL').getBoundingClientRect();
   el.style.cssText = 'left:' + box.right + 'px;top:' + box.top + 'px;width:' + PLOTW + 'px';
