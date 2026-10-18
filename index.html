@@ -99,7 +99,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-18l';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-18m';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.208;         // share of the panels' height given to the rain panel at the top (temperature and wind share the rest)
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -349,12 +349,12 @@ function drawWeek(d) {
   if (!CANDLE) {
     out += '<path d="' + curve(fp) + '" fill="none" stroke="url(#wxtg)" stroke-width="1.6" stroke-linecap="round" clip-path="url(#wxT)"/>';
     out += '<path d="' + curve(tp) + '" fill="none" stroke="url(#wxtg)" stroke-width="2.1" stroke-linecap="round" clip-path="url(#wxT)"/>';
-  } else for (var k6 = Math.floor(H0 / 6) * 6; k6 < n; k6 += 6) {
-    // one candle per 6 hours: the wick from the lowest to the highest temperature, the body from the first hour to the last,
+  } else for (var kd = Math.floor(H0 / 24) * 24; kd < n; kd += 24) {
+    // one candle per day: the wick from the lowest to the highest temperature, the body from the first hour to the last,
     // gold and filled when warming, blue and hollow when cooling
-    var c6 = TEMP.slice(Math.max(k6, H0), Math.min(k6 + 6, n)), co = yT(c6[0]), cc = yT(c6[c6.length - 1]), cx6 = x(k6 + 2.5), cw6 = step * 3.6;
-    out += '<g clip-path="url(#wxT)" stroke="' + (cc > co ? '#2a7de1' : GOLD) + '" stroke-width="1.4"><path d="M' + cx6 + ',' + yT(Math.max.apply(null, c6)) + ' V' + yT(Math.min.apply(null, c6)) + '"/>' +
-      '<rect x="' + (cx6 - cw6 / 2) + '" y="' + Math.min(co, cc) + '" width="' + cw6 + '" height="' + Math.max(1.5, Math.abs(co - cc)) + '" fill="' + (cc > co ? 'var(--surface)' : GOLD) + '"/></g>';
+    var td = TEMP.slice(Math.max(kd, H0), Math.min(kd + 24, n)), co = yT(td[0]), cc = yT(td[td.length - 1]), txd = x(kd + 11.5), twd = step * 12;
+    out += '<g clip-path="url(#wxT)" stroke="' + (cc > co ? '#2a7de1' : GOLD) + '" stroke-width="1.4"><path d="M' + txd + ',' + yT(Math.max.apply(null, td)) + ' V' + yT(Math.min.apply(null, td)) + '"/>' +
+      '<rect x="' + (txd - twd / 2) + '" y="' + Math.min(co, cc) + '" width="' + twd + '" height="' + Math.max(1.5, Math.abs(co - cc)) + '" fill="' + (cc > co ? 'var(--surface)' : GOLD) + '"/></g>';
   }
   // wind barbs along the middle of the temperature band, one every BK hours: the dot is the place, the staff points to where the
   // wind comes from, the feathers give the mean wind (long 10 kt, short 5 kt, triangle 50 kt); drawn at half size so they
