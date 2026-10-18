@@ -105,7 +105,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London', HOME
 var DAYS = 14;                   // number of days to chart, starting today (the 7d button shows 7 of them, slide for the rest)
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-19g';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-19h';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.208;         // share of the panels' height given to the rain panel at the top (temperature and wind share the rest)
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -350,9 +350,11 @@ function drawWeek(d) {
     out += '<path d="' + curve(fp) + '" fill="none" stroke="url(#wxtg)" stroke-width="1.6" stroke-linecap="round" clip-path="url(#wxT)"/>';
     out += '<path d="' + curve(tp) + '" fill="none" stroke="url(#wxtg)" stroke-width="2.1" stroke-linecap="round" clip-path="url(#wxT)"/>';
   } else for (var kd = Math.floor(H0 / 24) * 24; kd < n; kd += 24) {
-    // one bar per day from the lowest to the highest temperature
-    var td = TEMP.slice(Math.max(kd, H0), Math.min(kd + 24, n)), ctop = yT(Math.max.apply(null, td)), twd = step * 12;
-    out += '<rect clip-path="url(#wxT)" x="' + (x(kd + 11.5) - twd / 2) + '" y="' + ctop + '" width="' + twd + '" height="' + Math.max(1.5, yT(Math.min.apply(null, td)) - ctop) + '" fill="#b29d38"/>';
+    // one bar per day from the lowest to the highest temperature, the highest written above it and the lowest below
+    var td = TEMP.slice(Math.max(kd, H0), Math.min(kd + 24, n)), tmax = Math.max.apply(null, td), tmin = Math.min.apply(null, td), ctop = yT(tmax), cbot = yT(tmin), twd = step * 12;
+    out += '<rect clip-path="url(#wxT)" x="' + (x(kd + 11.5) - twd / 2) + '" y="' + ctop + '" width="' + twd + '" height="' + Math.max(1.5, cbot - ctop) + '" fill="#b29d38"/>' +
+      '<text x="' + x(kd + 11.5) + '" y="' + (ctop - 4) + '" fill="' + GOLD + '" ' + BIG + '>' + tmax + '°</text>' +
+      '<text x="' + x(kd + 11.5) + '" y="' + (cbot + FS * 0.8 + 3) + '" fill="' + GOLD + '" ' + BIG + '>' + tmin + '°</text>';
   }
   // wind barbs along the middle of the temperature band, one every BK hours: the dot is the place, the staff points to where the
   // wind comes from, the feathers give the mean wind (long 10 kt, short 5 kt, triangle 50 kt); drawn at half size so they
@@ -385,7 +387,7 @@ function drawWeek(d) {
     var h = i % 24;
     if (h % HK === 0) out += '<text x="' + x(i) + '" y="' + (T + ihU - 3) + '" text-anchor="middle" font-size="12.5" fill="var(--muted)" stroke="var(--surface)" stroke-width="2.5" paint-order="stroke" ' + mono + '>' + (h < 10 ? '0' + h : h) + '</text>';
   }
-  drawDayTemps();
+  if (!CANDLE) drawDayTemps();   // the 7-day bars carry their own
   // current-time marker with a small tag of the conditions right now (interpolated between the hourly values)
   var nx = x(0) + d.NOW * step;
   // everything before now is washed out and hatched with diagonal lines
