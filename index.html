@@ -99,7 +99,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London';
 var DAYS = 7;                    // number of days to chart, starting today
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-18m';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-18n';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.208;         // share of the panels' height given to the rain panel at the top (temperature and wind share the rest)
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -137,7 +137,8 @@ function drawWeek(d) {
   var HOME = Math.max(0, Math.floor(d.NOW) - PAST_HOURS), H0 = Math.max(0, Math.floor(d.NOW) - BACK_HOURS), X0 = H0 * step;   // hour at the left edge on opening; first hour drawn
   // how often things are drawn, so they never overlap when the time axis is squeezed
   function every(list, min) { for (var q = 0; q < list.length - 1 && list[q] * step < min; q++); return list[q]; }
-  var IK = every([1, 2, 3, 4, 6, 8, 12, 24], 34), HK = every([1, 2, 3, 6, 12], 18), BK = every([1, 2, 3, 4, 6, 8, 12, 24], 26);   // sky icons, hour labels, wind barbs
+  var SPAN = PLOTW / PXH, FULL = SPAN > 48, CANDLE = SPAN > 100;   // hours on screen: from 3 days the comets fill the panel, from 7 temperature is drawn as daily candles under one sky icon a day
+  var IK = CANDLE ? 24 : every([1, 2, 3, 4, 6, 8, 12, 24], 34), HK = every([1, 2, 3, 6, 12], 18), BK = every([1, 2, 3, 4, 6, 8, 12, 24], 26);   // sky icons, hour labels, wind barbs
   var RMAX = Math.min(100, Math.max(30, Math.ceil(Math.max.apply(null, RAIN) / 30) * 30));
   var MMAX = [1, 2, 4, 6, 10, 20, 40].filter(function (m) { return m >= Math.max.apply(null, MM); })[0] || 80;   // mm scale of the rain bars
   // Lido water temperature for each day on the chart: today's figure, then each later day moves 0.17 of the way towards
@@ -168,7 +169,7 @@ function drawWeek(d) {
   var VO0 = VO - WF * (1 - VS);
   // wind is drawn around the temperature band (between temperature and feels-like, middle wy): beyond its edges it reaches as
   // far out as the gust is strong (WH above the upper edge and below the lower one at 50 km/h)
-  var WH = 0.26 * TH, SPAN = PLOTW / PXH, FULL = SPAN > 48, CANDLE = SPAN > 100;   // hours on screen: from 3 days the comets fill the panel, from 7 temperature is drawn as candles
+  var WH = 0.26 * TH;
   function wy(i) { return (yT(TEMP[i]) + yT(FEEL[i])) / 2; }
   function wedge(i, sgn) { return sgn < 0 ? Math.min(yT(TEMP[i]), yT(FEEL[i])) : Math.max(yT(TEMP[i]), yT(FEEL[i])); }   // upper or lower edge
   function yT(v) { return TF - VS * ((v - TMIN) / (TMAX - TMIN)) * TH + VO0; }
@@ -351,10 +352,10 @@ function drawWeek(d) {
     out += '<path d="' + curve(tp) + '" fill="none" stroke="url(#wxtg)" stroke-width="2.1" stroke-linecap="round" clip-path="url(#wxT)"/>';
   } else for (var kd = Math.floor(H0 / 24) * 24; kd < n; kd += 24) {
     // one candle per day: the wick from the lowest to the highest temperature, the body from the first hour to the last,
-    // gold and filled when warming, blue and hollow when cooling
+    // gold when warming, blue when cooling
     var td = TEMP.slice(Math.max(kd, H0), Math.min(kd + 24, n)), co = yT(td[0]), cc = yT(td[td.length - 1]), txd = x(kd + 11.5), twd = step * 12;
-    out += '<g clip-path="url(#wxT)" stroke="' + (cc > co ? '#2a7de1' : GOLD) + '" stroke-width="1.4"><path d="M' + txd + ',' + yT(Math.max.apply(null, td)) + ' V' + yT(Math.min.apply(null, td)) + '"/>' +
-      '<rect x="' + (txd - twd / 2) + '" y="' + Math.min(co, cc) + '" width="' + twd + '" height="' + Math.max(1.5, Math.abs(co - cc)) + '" fill="' + (cc > co ? 'var(--surface)' : GOLD) + '"/></g>';
+    out += '<g clip-path="url(#wxT)" stroke="' + (cc > co ? '#2a7de1' : GOLD) + '" fill="' + (cc > co ? '#2a7de1' : GOLD) + '" stroke-width="1.4"><path d="M' + txd + ',' + yT(Math.max.apply(null, td)) + ' V' + yT(Math.min.apply(null, td)) + '"/>' +
+      '<rect x="' + (txd - twd / 2) + '" y="' + Math.min(co, cc) + '" width="' + twd + '" height="' + Math.max(1.5, Math.abs(co - cc)) + '" "/></g>';
   }
   // wind barbs along the middle of the temperature band, one every BK hours: the dot is the place, the staff points to where the
   // wind comes from, the feathers give the mean wind (long 10 kt, short 5 kt, triangle 50 kt); drawn at half size so they
