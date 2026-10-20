@@ -118,7 +118,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London', HOME
 var DAYS = 14;                   // number of days to chart, starting today (the 7d button shows 7 of them, slide for the rest)
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-20j';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-20k';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.208;         // share of the panels' height given to the rain panel at the top (temperature and wind share the rest)
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -396,9 +396,9 @@ function drawWeek(d, low) {
     var a = k * 24;
     // the rain panel has no scale: each day's highest chance and highest amount sit under the fill at the hour of that chance (on the 7-day view, at the top of the cloud)
     var r = RAIN.slice(a, a + 24), mr = Math.max.apply(null, r), mm = Math.max.apply(null, MM.slice(a, a + 24)), ir = a + r.indexOf(mr);
-    if (mr >= 5 && ir >= H0) rlab.push({ x: x(ir), mr: mr, w: ((mr + '%').length + (mm ? (mm + '').length + 5 : 0)) * rfs * 0.62,
-      t: '<text x="' + x(ir) + '" y="' + (CANDLE ? RTOP + rfs + 2 : Math.min(RB - 4, yR(mr) + SFS * 0.8 + 3)) + '" fill="' + RC + '" ' + BIG + ' style="font-size:' + rfs + 'px">' + mr + '%' +
-      (mm ? ' <tspan fill="' + MARINE + '">' + mm + KMH.replace('km/h', 'mm/h') + '</tspan>' : '') + '</text>' });
+    if (mr >= 5 && ir >= H0) rlab.push({ x: x(ir), mr: mr, w: Math.max((mr + '%').length, mm ? (mm + '').length + 4 : 0) * rfs * 0.62,   // the chance above the amount
+      t: '<text x="' + x(ir) + '" y="' + (CANDLE ? RTOP + rfs + 2 : Math.min(RB - 4 - (mm ? rfs : 0), yR(mr) + SFS * 0.8 + 3)) + '" fill="' + RC + '" ' + BIG + ' style="font-size:' + rfs + 'px">' + mr + '%' +
+      (mm ? '<tspan x="' + x(ir) + '" dy="' + rfs + '" fill="' + MARINE + '">' + mm + KMH.replace('km/h', 'mm/h') + '</tspan>' : '') + '</text>' });
     // sunrise and sunset: a small icon on the day/night boundary in the strip at the top, the time under it
     s.forEach(function (v, j) {
       if (xt(a + v) < X0 + 13 || (s[1] - s[0]) * step < 30) return;   // would be cut by the left edge, or the two would collide
@@ -482,7 +482,7 @@ function drawWeek(d, low) {
 // Temperature and gust figures are pinned at the left edge of the plot: they read the hour at that edge and follow the
 // chart as it slides, the temperature just above its curve and the gust just under it. The Lido figure, two
 // little waves and the water temperature, is pinned at the right edge at its level and follows the day at that edge.
-// The rain chance and amount at that hour sit side by side at the top of the rain panel, two thirds the size.
+// The rain chance and amount at that hour sit one above the other at the top of the rain panel, two thirds the size.
 function placeNow() {
   var v = VIEW, el = document.getElementById('nowfig');
   if (!v || v.step * 24 < 50) { el.innerHTML = ''; return; }
@@ -495,8 +495,8 @@ function placeNow() {
   el.style.cssText = 'left:' + box.right + 'px;top:' + box.top + 'px;width:' + PLOTW + 'px';
   el.innerHTML = f.filter(function (q) { return q[0] > v.TT + S * 0.8 && q[0] < v.T + v.ihU; }).map(function (q) {
     return '<div style="' + (q[3] ? 'right:3px' : 'left:3px') + ';top:' + q[0] * ZOOM + 'px;color:' + q[1] + ';font-size:' + S * (q[3] ? 0.8 : 1) * ZOOM + 'px">' + q[2] + '</div>';
-  }).join('') + '<div style="left:3px;top:' + (v.RTOP + 4 + S * 0.55) * ZOOM + 'px;color:' + v.RC + ';font-size:' + S * 2 / 3 * ZOOM + 'px">' +
-    at(d.RAIN) + '% <span style="color:' + v.MARINE + '">' + d.MM[Math.floor(h)] + '<small>mm/h</small></span></div>';
+  }).join('') + '<div style="left:3px;top:' + (v.RTOP + 3) * ZOOM + 'px;transform:none;flex-direction:column;align-items:flex-start;gap:1px;color:' + v.RC + ';font-size:' + S * 2 / 3 * ZOOM + 'px">' +
+    at(d.RAIN) + '%<span style="color:' + v.MARINE + '">' + d.MM[Math.floor(h)] + '<small>mm/h</small></span></div>';   // the chance above the amount
 }
 document.querySelector('.scroll').addEventListener('scroll', function () { SLID = Date.now(); placeNow(); }, { passive: true });
 // a tap on a day of the bottom chart slides the top chart to 06:00 that day
