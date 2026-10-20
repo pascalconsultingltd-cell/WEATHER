@@ -56,7 +56,7 @@ html, body { height:100%; overflow:hidden; background:var(--surface); }
 .chart { position:fixed; inset:0; display:flex; align-items:flex-start; background:var(--surface);
   padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 /* the screen is split: the chosen view on top, the 7 days below */
-#chart { bottom:50%; padding-bottom:0; }
+#chart { top:30px; bottom:50%; padding-bottom:0; }
 #chart2 { top:50%; padding-top:0; border-top:1px solid var(--line); }
 .chart svg { display:block; flex:none; }
 #axL, #axR { touch-action:none; }   /* sliding up or down on an axis changes its scale */
@@ -81,9 +81,8 @@ html, body { height:100%; overflow:hidden; background:var(--surface); }
   text-shadow:0 0 2px var(--surface), 0 0 2px var(--surface), 0 0 3px var(--surface); }
 .nowfig > div { position:absolute; display:flex; align-items:center; gap:3px; line-height:1; white-space:nowrap; transform:translateY(-78%); }
 .nowfig small { font-size:0.42em; margin-left:-2px; }
-/* how many days fill the screen: four buttons over the right end of the day banner */
-.zoomsel { position:fixed; z-index:2; top:env(safe-area-inset-top); right:env(safe-area-inset-right); height:30px; display:flex; align-items:center; gap:4px; padding:0 5px; border-bottom-left-radius:8px;
-  background:var(--surface); border-left:1px solid var(--line); border-bottom:1px solid var(--line); box-sizing:border-box; }
+.zoomsel { position:fixed; z-index:2; top:env(safe-area-inset-top); left:env(safe-area-inset-left); right:env(safe-area-inset-right); height:30px; display:flex; align-items:center;
+  justify-content:flex-end; gap:4px; padding:0 5px; background:var(--surface); border-bottom:1px solid var(--line); box-sizing:border-box; }   /* the place and view buttons, in a band of their own on top */
 .zoomsel button { margin:0; padding:0; width:40px; height:25px; border:1px solid var(--line); border-radius:13px; background:var(--surface); color:var(--muted);
   font:700 13.5px var(--font-display); -webkit-tap-highlight-color:transparent; }
 .zoomsel button.on { background:#0b3d91; border-color:#0b3d91; color:#fff; }
@@ -113,7 +112,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London', HOME
 var DAYS = 14;                   // number of days to chart, starting today (the 7d button shows 7 of them, slide for the rest)
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-20a';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-20b';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.208;         // share of the panels' height given to the rain panel at the top (temperature and wind share the rest)
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -216,7 +215,8 @@ function drawWeek(d, low) {
       var txt = w >= 100 ? day.label : w >= 44 ? day.short : w >= 24 ? day.short.slice(0, 3) : '';
       if (day.we) band += '<rect x="' + a + '" y="' + (WF + 0.5) + '" width="' + w + '" height="' + (T + ih - WF - 0.5) + '" fill="var(--weekend)"/>';
       if (k) band += '<line x1="' + a + '" x2="' + a + '" y1="' + WF + '" y2="' + (T + ih) + '" stroke="var(--line)" stroke-width="1"/>';
-      band += '<text x="' + (a + w / 2) + '" y="' + (T + ihU + 13) + '" text-anchor="middle" font-size="11" font-weight="700" fill="var(--fg)" font-family="Bricolage Grotesque, Helvetica Neue, Arial, sans-serif">' + txt + '</text>';
+      if (low && w >= 24) txt = day.short.slice(0, 3) + '</tspan><tspan x="' + (a + w / 2) + '" dy="9" font-size="8" font-weight="500">' + day.label.split(' ').slice(1).join(' ');   // bottom chart: the date under the day
+      band += '<text x="' + (a + w / 2) + '" y="' + (T + ihU + (low ? 10 : 13)) + '" text-anchor="middle" font-size="11" font-weight="700" fill="var(--fg)" font-family="Bricolage Grotesque, Helvetica Neue, Arial, sans-serif"><tspan>' + txt + '</tspan></text>';
     });
     return band;
   }
@@ -363,9 +363,9 @@ function drawWeek(d, low) {
     out += '<path d="' + curve(fp) + '" fill="none" stroke="url(#wxtg)" stroke-width="1.6" stroke-linecap="round" clip-path="url(#wxT)"/>';
     out += '<path d="' + curve(tp) + '" fill="none" stroke="url(#wxtg)" stroke-width="2.1" stroke-linecap="round" clip-path="url(#wxT)"/>';
   } else for (var kd = Math.floor(H0 / 24) * 24; kd < n; kd += 24) {
-    // one bar per day from the lowest to the highest temperature, the highest written above it and the lowest below
+    // one bar per day from the lowest to the highest temperature (blue to gold like the curves), the highest written above it and the lowest below
     var td = TEMP.slice(Math.max(kd, H0), Math.min(kd + 24, n)), tmax = Math.max.apply(null, td), tmin = Math.min.apply(null, td), ctop = yT(tmax), cbot = yT(tmin), twd = step * 12;
-    out += '<rect clip-path="url(#wxT)" x="' + (x(kd + 11.5) - twd / 2) + '" y="' + ctop + '" width="' + twd + '" height="' + Math.max(1.5, cbot - ctop) + '" fill="#b29d38"/>' +
+    out += '<rect clip-path="url(#wxT)" x="' + (x(kd + 11.5) - twd / 2) + '" y="' + ctop + '" width="' + twd + '" height="' + Math.max(1.5, cbot - ctop) + '" fill="url(#wxtg)"/>' +
       '<text x="' + x(kd + 11.5) + '" y="' + (ctop - 4) + '" fill="' + GOLD + '" ' + BIG + '>' + tmax + '°</text>' +
       '<text x="' + x(kd + 11.5) + '" y="' + (cbot + FS * 0.8 + 3) + '" fill="' + GOLD + '" ' + BIG + '>' + tmin + '°</text>';
   }
