@@ -118,7 +118,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London', HOME
 var DAYS = 14;                   // number of days to chart, starting today (the 7d button shows 7 of them, slide for the rest)
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-20o';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-20p';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.208;         // share of the panels' height given to the rain panel at the top (temperature and wind share the rest)
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -508,11 +508,11 @@ function placeNow() {
     at(d.RAIN) + '%<span style="color:' + v.MARINE + '">' + d.MM[Math.floor(h)] + '<small>mm/h</small></span></div>';   // the chance above the amount
 }
 document.querySelector('.scroll').addEventListener('scroll', function () { SLID = Date.now(); placeNow(); }, { passive: true });
-// a tap on a day of the bottom chart slides the top chart to 06:00 that day
+// a tap on a day of the bottom chart slides the top chart to 06:00 that day (today: the now line at the left edge)
 document.getElementById('scroll2').addEventListener('click', function (e) {
   if (!VIEW || !LOW) return;
   var day = Math.floor((LOW.H0 + (e.clientX - document.getElementById('wxchart2').getBoundingClientRect().left) / LOW.pxh) / 24);
-  document.querySelector('.scroll').scrollTo({ left: (day * 24 + 6 - VIEW.H0) * PXH, behavior: 'smooth' });
+  document.querySelector('.scroll').scrollTo({ left: ((day === VIEW.d.TODAY ? VIEW.d.NOW + 0.5 : day * 24 + 6) - VIEW.H0) * PXH, behavior: 'smooth' });
 });
 
 // Crosshair: a line on one hour with that hour's values in a tag beside it, and a level line whose value is read on the axes.
