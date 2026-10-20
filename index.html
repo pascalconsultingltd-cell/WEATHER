@@ -55,11 +55,14 @@ body { margin:0; background:var(--bg); color:var(--fg); font-family:var(--font-b
 html, body { height:100%; overflow:hidden; background:var(--surface); }
 .chart { position:fixed; inset:0; display:flex; align-items:flex-start; background:var(--surface);
   padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+/* the screen is split: the chosen view on top, the 7 days below */
+#chart { bottom:50%; padding-bottom:0; }
+#chart2 { top:50%; padding-top:0; border-top:1px solid var(--line); }
 .chart svg { display:block; flex:none; }
 #axL, #axR { touch-action:none; }   /* sliding up or down on an axis changes its scale */
 /* Touches must land on the containers, not on the drawing inside them: the drawing is rebuilt during a pinch or an axis
    slide, and a touch that started on a removed element stops reporting its movement. */
-#wxchart, #days, #axL *, #axR * { pointer-events:none; }
+#wxchart, #days, #axL *, #axR *, #wxchart2, #days2, #axL2 *, #axR2 * { pointer-events:none; }
 .chart > svg { margin-top:26px; }   /* height of the day-label row */
 .scroll { flex:1; min-width:0; height:100%; overflow-x:auto; overflow-y:hidden; overscroll-behavior:contain; scrollbar-width:none; -webkit-overflow-scrolling:touch;
   touch-action:pan-x; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }   /* pinch and press are handled in the script */
@@ -96,8 +99,13 @@ html, body { height:100%; overflow:hidden; background:var(--surface); }
 <div class="zoomsel" id="zoomsel"><button id="placeb"></button><input id="placein" placeholder="City, empty = home" enterkeyhint="go"><button data-h="-1">Now</button><button data-h="36">1.5d</button><button data-h="72">3d</button><button data-h="168">7d</button></div>
 <div class="chart" id="chart">
   <svg id="axL"></svg>
-  <div class="scroll"><div class="days" id="days"></div><svg id="wxchart" role="img" aria-label="Hourly forecast chart, 14 days"></svg></div>
+  <div class="scroll" id="scroll"><div class="days" id="days"></div><svg id="wxchart" role="img" aria-label="Hourly forecast chart, 14 days"></svg></div>
   <svg id="axR"></svg>
+</div>
+<div class="chart" id="chart2">
+  <svg id="axL2"></svg>
+  <div class="scroll" id="scroll2"><div class="days" id="days2"></div><svg id="wxchart2" role="img" aria-label="Daily forecast chart, 7 days on screen"></svg></div>
+  <svg id="axR2"></svg>
 </div>
 <script>
 // Location and display settings. Forecast comes from Open-Meteo (free, no API key).
@@ -105,7 +113,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London', HOME
 var DAYS = 14;                   // number of days to chart, starting today (the 7d button shows 7 of them, slide for the rest)
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-19h';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-20a';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.208;         // share of the panels' height given to the rain panel at the top (temperature and wind share the rest)
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -119,20 +127,25 @@ var LIDO_URL = location.protocol.indexOf('http') === 0 ? 'lido.json' : 'https://
 var ICON_BASE = 'https://cdn.jsdelivr.net/gh/basmilius/weather-icons@dev/production/fill/svg-static/';
 var PXH = 0, USER_ZOOM = false, PLOTW = 0;   // screen px per hour (set to fit FIT_HOURS until the user pinches), width of the plot on screen
 var VS = 1, VO = 0;                          // vertical stretch and shift of the wind and temperature scales, set by sliding on an axis (1 and 0 = automatic)
-var HOMED = false, SLID = 0;                 // the chart has been placed on "now"; when the chart was last slid (ms)
+var HOMED = false, HOMED2 = false, SLID = 0;  // the top and bottom charts have been placed on "now"; when the chart was last slid (ms)
 var VIEW = null, CROSS = null;               // geometry of the last drawing, and the crosshair {i: hour index, y: chart units}
 
 // One continuous chart. d: {WIND, GUST (km/h), RAIN (% chance), MM (mm of rain in the hour), TEMP (C), FEEL (feels-like, C), DIR (bearing wind comes FROM), ICON} per hour from 00:00 on day 0,
 // SUN: [[sunrise, sunset], ...] per day in decimal hours, DAYS: [{label, short, we}] per day, NOW: hours since 00:00 on day 0, TODAY: index of today.
-function drawWeek(d) {
+// low: draw the bottom chart instead, always 7 days on screen, without the wind comets, the crosshair or the pinned figures
+function drawWeek(d, low) {
   var WIND = d.WIND, GUST = d.GUST, RAIN = d.RAIN, MM = d.MM, TEMP = d.TEMP, FEEL = d.FEEL, DIR = d.DIR, ICON = d.ICON;
-  var chartEl = document.getElementById('chart'), AL = 26, AR = 33;
-  PLOTW = Math.max(60, chartEl.clientWidth - (AL + AR) * ZOOM);   // never negative while the page is still being laid out
+  var sx = low ? '2' : '', chartEl = document.getElementById('chart' + sx), AL = 26, AR = 33;
+  var plotw = Math.max(60, chartEl.clientWidth - (AL + AR) * ZOOM), pxh = PXH, VS = low ? 1 : window.VS, VO = low ? 0 : window.VO;   // never negative while the page is still being laid out
   var hr = d.NOW - d.TODAY * 24, dusk = d.SUN[d.TODAY][1];   // "Now" view ends at sunset, or once that has passed an hour after tomorrow's sunrise
-  if (!USER_ZOOM) PXH = FIT_HOURS < 0 ? Math.min(PXH_MAX, Math.max(20, PLOTW - NOW_ROOM * ZOOM) / ((hr < dusk ? dusk : 25 + d.SUN[d.TODAY + 1][0]) - hr))
-    : PLOTW / (FIT_HOURS || WIND.length - Math.max(0, Math.floor(d.NOW) - PAST_HOURS));   // 0 = from the opening position to the end of the week
-  [].forEach.call(document.querySelectorAll('#zoomsel button'), function (b) { b.className = !USER_ZOOM && +b.getAttribute('data-h') === FIT_HOURS ? 'on' : ''; });
-  var n = WIND.length, step = PXH / ZOOM, W = n * step, H = Math.max(200, Math.floor((chartEl.clientHeight - 26) / ZOOM)), T = 6, MT = T + 2, B = 4, ih = H - T - B;   // the sun and moon sit at the top of the panel (MT), in the rain zone
+  if (low) pxh = plotw / 168;
+  else {
+    PLOTW = plotw;
+    if (!USER_ZOOM) PXH = pxh = FIT_HOURS < 0 ? Math.min(PXH_MAX, Math.max(20, PLOTW - NOW_ROOM * ZOOM) / ((hr < dusk ? dusk : 25 + d.SUN[d.TODAY + 1][0]) - hr))
+      : PLOTW / (FIT_HOURS || WIND.length - Math.max(0, Math.floor(d.NOW) - PAST_HOURS));   // 0 = from the opening position to the end of the week
+    [].forEach.call(document.querySelectorAll('#zoomsel button'), function (b) { b.className = !USER_ZOOM && +b.getAttribute('data-h') === FIT_HOURS ? 'on' : ''; });
+  }
+  var n = WIND.length, step = pxh / ZOOM, W = n * step, H = Math.max(200, Math.floor((chartEl.clientHeight - 26) / ZOOM)), T = 6, MT = T + 2, B = 4, ih = H - T - B;   // the sun and moon sit at the top of the panel (MT), in the rain zone
   // top to bottom: the sky icons, then one panel (top TT = WT = T, floor TF = WF = T + ihU, height TH)
   // holding temperature and wind with rain hanging upside down from its top (down to RB, height RH), then the band of day names
   var PANELS = ih - 4 - 23;
@@ -141,7 +154,7 @@ function drawWeek(d) {
   var HOME = Math.max(0, Math.floor(d.NOW) - PAST_HOURS), H0 = Math.max(0, Math.floor(d.NOW) - BACK_HOURS), X0 = H0 * step;   // hour at the left edge on opening; first hour drawn
   // how often things are drawn, so they never overlap when the time axis is squeezed
   function every(list, min) { for (var q = 0; q < list.length - 1 && list[q] * step < min; q++); return list[q]; }
-  var SPAN = PLOTW / PXH, FULL = SPAN > 48, CANDLE = SPAN > 100;   // hours on screen: from 3 days the comets fill the panel, from 7 temperature is drawn as daily min-max bars
+  var SPAN = plotw / pxh, FULL = SPAN > 48, CANDLE = SPAN > 100;   // hours on screen: from 3 days the comets fill the panel, from 7 temperature is drawn as daily min-max bars
   var HK = every([1, 2, 3, 6, 12], 18), BK = every([1, 2, 3, 4, 6, 8, 12, 24], 26);   // hour labels, wind barbs
   var RMAX = Math.min(100, Math.max(30, Math.ceil(Math.max.apply(null, RAIN) / 30) * 30));
   var MMAX = [1, 2, 4, 6, 10, 20, 40].filter(function (m) { return m >= Math.max.apply(null, MM); })[0] || 80;   // mm scale of the rain bars
@@ -301,7 +314,7 @@ function drawWeek(d) {
   out += '<defs>' + cdefs + '</defs>';
   var comets = '', cstep = Math.max(1, Math.ceil(10 / step));
   function rnd(a, b, c) { var t = Math.sin(a * 12.9898 + b * 78.233 + c * 37.719) * 43758.5453; return t - Math.floor(t); }   // fixed pseudo-random 0..1
-  for (var ci = H0; ci < n; ci += cstep) {
+  for (var ci = low ? n : H0; ci < n; ci += cstep) {   // none on the bottom chart
     var cg = GUST[ci], cw = Math.min(cg, 50) / 50 * WH, ctop = FULL ? TT : wedge(ci, -1) - cw, cbot = FULL ? WF : wedge(ci, 1) + cw;
     var clen = 6 + Math.min(cg, 50) / 50 * 11, cdist = 10 + Math.min(cg, 50) / 50 * 22, cdur = Math.min(6, Math.max(0.6, 900 / (cg * cg)));   // 30 km/h: 1 s, 15: 4 s
     for (var cj = 0, cnum = Math.max(1, Math.round(cg / 3.5 * (FULL ? 2 : 1))); cj < cnum; cj++) {   // twice as many over the whole panel
@@ -424,20 +437,27 @@ function drawWeek(d) {
     el.setAttribute('viewBox', vx + ' 0 ' + vw + ' ' + H);
     return el;
   }
-  size('wxchart', X0, W - X0 + INFO).innerHTML = out + '<g id="wxcross"></g>';
-  size('axL', 0, AL).innerHTML = axL + '<g id="axLcross"></g>';
-  size('axR', 0, AR).innerHTML = axR + '<g id="axRcross"></g>';
-  VIEW = { d: d, n: n, step: step, W: W, T: T, ih: ih, ihU: ihU, RTOP: RTOP, RB: RB, TT: TT, TF: TF, WT: WT, H0: H0, X0: X0, x: x, yT: yT, yR: yR,
+  if (low) {   // the drawing's own ids get another prefix, so they do not clash with the top chart's
+    size('wxchart2', X0, W - X0 + INFO).innerHTML = out.replace(/(id="|url\(#)wx/g, '$1wb');
+    size('axL2', 0, AL).innerHTML = axL;
+    size('axR2', 0, AR).innerHTML = axR;
+  } else {
+    size('wxchart', X0, W - X0 + INFO).innerHTML = out + '<g id="wxcross"></g>';
+    size('axL', 0, AL).innerHTML = axL + '<g id="axLcross"></g>';
+    size('axR', 0, AR).innerHTML = axR + '<g id="axRcross"></g>';
+  }
+  if (!low) VIEW = { d: d, n: n, step: step, W: W, T: T, ih: ih, ihU: ihU, RTOP: RTOP, RB: RB, TT: TT, TF: TF, WT: WT, H0: H0, X0: X0, x: x, yT: yT, yR: yR,
     HOME: HOME, POOL: POOL, SFS: SFS, vT: vT, RMAX: RMAX, MMAX: MMAX, MARINE: MARINE, TMIN: TMIN, TMAX: TMAX, GOLD: GOLD, RC: RC, mono: mono };
-  drawCross();
+  if (!low) drawCross();
   // day banner above the plot; the name stays pinned at the left while that day is on screen
-  document.getElementById('days').innerHTML = d.DAYS.map(function (day, k) {
-    var hours = (k + 1) * 24 - Math.max(k * 24, H0), w = hours * PXH;   // the first day only runs from the first hour drawn
+  document.getElementById('days' + sx).innerHTML = d.DAYS.map(function (day, k) {
+    var hours = (k + 1) * 24 - Math.max(k * 24, H0), w = hours * pxh;   // the first day only runs from the first hour drawn
     if (hours <= 0) return '';
     var txt = k !== d.TODAY ? (w >= 150 ? day.label : w >= 66 ? day.short : w >= 34 ? day.short.slice(0, 3) : '') : w >= 210 ? 'Today · ' + day.label : w >= 60 ? 'Today' : '';   // whatever fits
     return '<div class="day' + (day.we ? ' we' : '') + (w < 66 ? ' tight' : '') + '" style="width:' + w + 'px"><b>' + txt + '</b></div>';   // weekend banner in yellow
   }).join('') + (INFO ? '<div class="day" style="width:' + INFO * ZOOM + 'px"><b>Lido info</b></div>' : '');
   // on opening, the left edge is a little before now; the earlier hours are there to drag back to
+  if (low) { if (!HOMED2) { HOMED2 = true; document.getElementById('scroll2').scrollLeft = (d.NOW + 0.5 - H0) * pxh; } return; }
   if (!HOMED) { HOMED = true; document.querySelector('.scroll').scrollLeft = FIT_HOURS < 0 ? (d.NOW + 0.5 - H0) * PXH - NOW_ROOM * ZOOM : (HOME - H0) * PXH; }
   placeNow();
 }
@@ -560,6 +580,7 @@ function render(j) {
     });
   });
   drawWeek(d);
+  drawWeek(d, true);
   document.getElementById('status').textContent = '';
 }
 // The app keeps this page open for days, so it checks for a newer build each time it loads the forecast and reloads itself once.
@@ -615,7 +636,7 @@ function load() {
   fetch(url).then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
     .then(function (j) {
       // a fresh forecast puts the chart back on "now" (the now line at its usual place) unless it was slid in the last 2 minutes
-      if (Date.now() - SLID > 120000) HOMED = false;
+      if (Date.now() - SLID > 120000) HOMED = HOMED2 = false;
       lastLoad = Date.now(); lastData = j; render(j);
     })
     .catch(function (e) {
