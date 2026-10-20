@@ -73,6 +73,8 @@ html, body { height:100%; overflow:hidden; background:var(--surface); }
 .day.tight b { padding:6px 3px 0; font-size:12px; }
 .day b { position:sticky; left:0; display:inline-block; padding:5px 8px 0; font:700 14px var(--font-display); white-space:nowrap; }
 .day.we { background:var(--weekend); }
+#days2 .day b { padding:2px 4px 0; font-size:12px; line-height:12px; }
+#days2 .day b small { display:block; font:500 8.5px var(--font-body); line-height:10px; }
 /* only shown when the forecast cannot be loaded */
 .status { position:fixed; z-index:1; left:8px; right:8px; top:calc(34px + env(safe-area-inset-top)); margin:0; padding:6px 8px; border-radius:6px; background:var(--warn-soft); color:var(--warn); font:400 12px var(--font-data); }
 .status:empty { display:none; }
@@ -116,7 +118,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London', HOME
 var DAYS = 14;                   // number of days to chart, starting today (the 7d button shows 7 of them, slide for the rest)
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-20g';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-20h';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.208;         // share of the panels' height given to the rain panel at the top (temperature and wind share the rest)
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -361,7 +363,8 @@ function drawWeek(d, low) {
     }
   }
   if (body.length > 1) puffs = '<path d="' + curve(body, false, [RTOP, RB]) + ' L' + body[body.length - 1][0] + ',' + RTOP + ' L' + body[0][0] + ',' + RTOP + ' Z"/>' + puffs;
-  out += '<g fill="' + GREY + '" opacity="0.45">' + puffs + '</g>' + drops;
+  out += '<clipPath id="wxcloud"><rect x="0" y="' + RTOP + '" width="' + W + '" height="' + (RH + 40) + '"/></clipPath>' +   // a straight top
+    '<g fill="' + GREY + '" opacity="0.45" clip-path="url(#wxcloud)">' + puffs + '</g>' + drops;
   out += divider();
   drawMoons();
   if (!CANDLE) {
@@ -460,6 +463,7 @@ function drawWeek(d, low) {
     var hours = (k + 1) * 24 - Math.max(k * 24, H0), w = hours * pxh;   // the first day only runs from the first hour drawn
     if (hours <= 0) return '';
     var txt = k !== d.TODAY ? (w >= 150 ? day.label : w >= 66 ? day.short : w >= 34 ? day.short.slice(0, 3) : '') : w >= 210 ? 'Today · ' + day.label : w >= 60 ? 'Today' : '';   // whatever fits
+    if (low) txt = w >= 24 ? day.short.slice(0, 3) + '<small>' + day.label.split(' ').slice(1).join(' ') + '</small>' : '';   // bottom chart: the date under the day
     return '<div class="day' + (day.we ? ' we' : '') + (w < 66 ? ' tight' : '') + '" style="width:' + w + 'px"><b>' + txt + '</b></div>';   // weekend banner in yellow
   }).join('') + (INFO ? '<div class="day" style="width:' + INFO * ZOOM + 'px"><b>Lido info</b></div>' : '');
   // on opening, the left edge is a little before now; the earlier hours are there to drag back to
