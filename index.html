@@ -118,7 +118,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London', HOME
 var DAYS = 14;                   // number of days to chart, starting today (the 7d button shows 7 of them, slide for the rest)
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-20h';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-20j';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.208;         // share of the panels' height given to the rain panel at the top (temperature and wind share the rest)
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -391,18 +391,25 @@ function drawWeek(d, low) {
   }
   // per-day labels: highest rain chance and amount (the temperature highs and lows are in the big fraction)
   function fmt(t) { var h = Math.floor(t), m = Math.round((t - h) * 60); if (m === 60) { h++; m = 0; } return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m; }
+  var rlab = [], rfs = Math.max(7, SFS * 2 / 3);
   d.SUN.forEach(function (s, k) {
     var a = k * 24;
-    // the rain panel has no scale: each day's highest chance and highest amount sit under the fill at the hour of that chance
+    // the rain panel has no scale: each day's highest chance and highest amount sit under the fill at the hour of that chance (on the 7-day view, at the top of the cloud)
     var r = RAIN.slice(a, a + 24), mr = Math.max.apply(null, r), mm = Math.max.apply(null, MM.slice(a, a + 24)), ir = a + r.indexOf(mr);
-    if (mr >= 5 && ir >= H0) out += '<text x="' + x(ir) + '" y="' + Math.min(RB - 4, yR(mr) + SFS * 0.8 + 3) + '" fill="' + RC + '" ' + BIG + ' style="font-size:' + Math.max(7, SFS * 2 / 3) + 'px">' + mr + '%' +
-      (mm ? ' <tspan fill="' + MARINE + '">' + mm + KMH.replace('km/h', 'mm/h') + '</tspan>' : '') + '</text>';
+    if (mr >= 5 && ir >= H0) rlab.push({ x: x(ir), mr: mr, w: ((mr + '%').length + (mm ? (mm + '').length + 5 : 0)) * rfs * 0.62,
+      t: '<text x="' + x(ir) + '" y="' + (CANDLE ? RTOP + rfs + 2 : Math.min(RB - 4, yR(mr) + SFS * 0.8 + 3)) + '" fill="' + RC + '" ' + BIG + ' style="font-size:' + rfs + 'px">' + mr + '%' +
+      (mm ? ' <tspan fill="' + MARINE + '">' + mm + KMH.replace('km/h', 'mm/h') + '</tspan>' : '') + '</text>' });
     // sunrise and sunset: a small icon on the day/night boundary in the strip at the top, the time under it
     s.forEach(function (v, j) {
       if (xt(a + v) < X0 + 13 || (s[1] - s[0]) * step < 30) return;   // would be cut by the left edge, or the two would collide
       out += '<image href="' + ICON_BASE + (j ? 'sunset' : 'sunrise') + '.svg" x="' + (xt(a + v) - 17) + '" y="' + MT + '" width="34" height="34"/>';
       out += '<text x="' + xt(a + v) + '" y="' + (MT + 35) + '" text-anchor="middle" font-size="9" font-weight="500" fill="var(--fg)" stroke="var(--surface)" stroke-width="2.5" paint-order="stroke" ' + mono + '>' + fmt(v) + '</text>';
     });
+  });
+  // the higher chance first; a label that would overlap one already placed (two days' peaks near midnight) is left out
+  var kept = [];
+  rlab.sort(function (p, q) { return q.mr - p.mr; }).forEach(function (l) {
+    if (kept.every(function (o) { return Math.abs(o.x - l.x) >= (o.w + l.w) / 2; })) { kept.push(l); out += l.t; }
   });
   for (var i = 0; i < n; i++) {
     var h = i % 24;
