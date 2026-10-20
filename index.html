@@ -117,8 +117,8 @@ html, body { height:100%; overflow:hidden; background:var(--surface); }
 var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London', HOME_PLACE = [PLACE, LAT, LON, TZ], AWAY = false;
 var DAYS = 14;                   // number of days to chart, starting today (the 7d button shows 7 of them, slide for the rest)
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
-var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to sunset, or after sunset to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-20y';       // change on every release: a page still running an older build reloads itself
+var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to 21:00 or sunset if later, or from 20:00 to an hour past tomorrow's sunrise)
+var BUILD = '2026-10-20z';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.208;         // share of the panels' height given to the rain panel at the top (temperature and wind share the rest)
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -142,11 +142,11 @@ function drawWeek(d, low) {
   var WIND = d.WIND, GUST = d.GUST, RAIN = d.RAIN, MM = d.MM, TEMP = d.TEMP, FEEL = d.FEEL, DIR = d.DIR, ICON = d.ICON;
   var sx = low ? '2' : '', chartEl = document.getElementById('chart' + sx), AL = 26, AR = 33;
   var plotw = Math.max(60, chartEl.clientWidth - (AL + AR) * ZOOM), pxh = PXH, VS = low ? 1 : window.VS, VO = low ? 0 : window.VO;   // never negative while the page is still being laid out
-  var hr = d.NOW - d.TODAY * 24, dusk = d.SUN[d.TODAY][1];   // "Now" view ends at sunset, or once that has passed an hour after tomorrow's sunrise
+  var hr = d.NOW - d.TODAY * 24, dusk = Math.max(21, d.SUN[d.TODAY][1]);   // "Now" view ends at 21:00 (or sunset if later), and from 20:00 an hour after tomorrow's sunrise
   if (low) pxh = plotw / 168;
   else {
     PLOTW = plotw;
-    if (!USER_ZOOM) PXH = pxh = FIT_HOURS < 0 ? Math.min(PXH_MAX, Math.max(20, PLOTW - NOW_ROOM * ZOOM) / ((hr < dusk ? dusk : 25 + d.SUN[d.TODAY + 1][0]) - hr))
+    if (!USER_ZOOM) PXH = pxh = FIT_HOURS < 0 ? Math.min(PXH_MAX, Math.max(20, PLOTW - NOW_ROOM * ZOOM) / ((hr < dusk - 1 ? dusk : 25 + d.SUN[d.TODAY + 1][0]) - hr))
       : PLOTW / (FIT_HOURS || WIND.length - Math.max(0, Math.floor(d.NOW) - PAST_HOURS));   // 0 = from the opening position to the end of the week
     [].forEach.call(document.querySelectorAll('#zoomsel button'), function (b) { b.className = !USER_ZOOM && +b.getAttribute('data-h') === FIT_HOURS ? 'on' : ''; });
   }
@@ -538,6 +538,9 @@ document.getElementById('scroll2').addEventListener('click', function (e) {
   if (!VIEW || !LOW) return;
   var day = Math.floor((LOW.H0 + (e.clientX - document.getElementById('wxchart2').getBoundingClientRect().left) / LOW.pxh) / 24);
   PICK = day; drawWeek(VIEW.d, true);
+  // today goes back to the Now view; another day shows at least 06:30 to 21:00, zooming out if needed
+  if (day === VIEW.d.TODAY) { FIT_HOURS = -1; USER_ZOOM = false; drawWeek(VIEW.d); }
+  else if (PLOTW / PXH < 14.5) { USER_ZOOM = true; PXH = PLOTW / 14.5; drawWeek(VIEW.d); }
   document.querySelector('.scroll').scrollTo({ left: ((day === VIEW.d.TODAY ? VIEW.d.NOW + 0.5 : day * 24 + 6.5) - VIEW.H0) * PXH, behavior: 'smooth' });
 });
 
