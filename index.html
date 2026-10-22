@@ -118,7 +118,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London', HOME
 var DAYS = 14;                   // number of days to chart, starting today (the 7d button shows 7 of them, slide for the rest)
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to 21:00 or sunset if later, or from 20:00 to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-21d';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-22a';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.208;         // share of the panels' height given to the rain panel at the top (temperature and wind share the rest)
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -158,7 +158,7 @@ function drawWeek(d, low) {
   var PANELS = ih - 4 - 23;
   var RH = Math.round(PANELS * RAIN_SPLIT), RTOP = T, RB = T + RH;
   var TT = T, WT = TT, WF = T + ih - 23, TF = WF, TH = WF - TT, ihU = WF - T;
-  var HOME = Math.max(0, Math.floor(d.NOW) - PAST_HOURS), H0 = Math.max(0, Math.floor(d.NOW) - BACK_HOURS), X0 = H0 * step;   // hour at the left edge on opening; first hour drawn
+  var HOME = Math.max(0, Math.floor(d.NOW) - PAST_HOURS), H0 = low ? d.TODAY * 24 : Math.max(0, Math.floor(d.NOW) - BACK_HOURS), X0 = H0 * step;   /* the bottom chart starts at 00:00 today */   // hour at the left edge on opening; first hour drawn
   // how often things are drawn, so they never overlap when the time axis is squeezed
   function every(list, min) { for (var q = 0; q < list.length - 1 && list[q] * step < min; q++); return list[q]; }
   var HK = every([1, 2, 3, 6, 12], 18), BK = every([1, 2, 3, 4, 6, 8, 12, 24], 26);   // hour labels, wind barbs
@@ -466,13 +466,15 @@ function drawWeek(d, low) {
   });
   // current-time marker with a small tag of the conditions right now (interpolated between the hourly values)
   var nx = x(0) + d.NOW * step;
-  // everything before now is washed out and hatched with diagonal lines
-  out += '<defs><pattern id="wxpast" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="#6b7780" stroke-width="1.3" stroke-opacity="0.45"/></pattern></defs>';
-  out += '<rect x="' + X0 + '" y="0" width="' + Math.max(0, nx - X0) + '" height="' + (T + ih) + '" fill="var(--surface)" fill-opacity="0.45"/>';
-  out += '<rect x="' + X0 + '" y="0" width="' + Math.max(0, nx - X0) + '" height="' + (T + ih) + '" fill="url(#wxpast)"/>';
-  out += '<line x1="' + nx + '" x2="' + nx + '" y1="' + T + '" y2="' + (T + ih) + '" stroke="var(--fg)" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="3 3"/>';
-  // the time now at the foot of the now line, just above the hours
-  out += '<text x="' + nx + '" y="' + (T + ihU - 19) + '" text-anchor="middle" font-size="12" font-weight="700" fill="var(--fg)" stroke="var(--surface)" stroke-width="3" paint-order="stroke" ' + mono + '>' + fmt(d.NOW - d.TODAY * 24) + '</text>';
+  if (!low) {   // the bottom chart keeps today whole: no wash, no now line
+    // everything before now is washed out and hatched with diagonal lines
+    out += '<defs><pattern id="wxpast" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" stroke="#6b7780" stroke-width="1.3" stroke-opacity="0.45"/></pattern></defs>';
+    out += '<rect x="' + X0 + '" y="0" width="' + Math.max(0, nx - X0) + '" height="' + (T + ih) + '" fill="var(--surface)" fill-opacity="0.45"/>';
+    out += '<rect x="' + X0 + '" y="0" width="' + Math.max(0, nx - X0) + '" height="' + (T + ih) + '" fill="url(#wxpast)"/>';
+    out += '<line x1="' + nx + '" x2="' + nx + '" y1="' + T + '" y2="' + (T + ih) + '" stroke="var(--fg)" stroke-width="1" stroke-opacity="0.55" stroke-dasharray="3 3"/>';
+    // the time now at the foot of the now line, just above the hours
+    out += '<text x="' + nx + '" y="' + (T + ihU - 19) + '" text-anchor="middle" font-size="12" font-weight="700" fill="var(--fg)" stroke="var(--surface)" stroke-width="3" paint-order="stroke" ' + mono + '>' + fmt(d.NOW - d.TODAY * 24) + '</text>';
+  }
   function at(arr) { var i = Math.floor(d.NOW), f = d.NOW - i, b = arr[Math.min(n - 1, i + 1)]; return Math.round(arr[i] + (b - arr[i]) * f); }
   // After the last day, a column of Lido practical details from lido.json: open or closed, today's hours, sauna sessions
   var INFO = LIDO && LIDO.hours ? 215 : 0;
@@ -521,7 +523,7 @@ function drawWeek(d, low) {
     return '<div class="day' + (day.we ? ' we' : '') + (w < 66 ? ' tight' : '') + '" style="width:' + w + 'px"><b>' + txt + '</b></div>';   // weekend banner in yellow
   }).join('') + (INFO ? '<div class="day" style="width:' + INFO * ZOOM + 'px"><b>Lido info</b></div>' : '');
   // on opening, the left edge is a little before now; the earlier hours are there to drag back to
-  if (low) { LOW = { pxh: pxh, H0: H0 }; if (!HOMED2) { HOMED2 = true; document.getElementById('scroll2').scrollLeft = (d.NOW + 0.5 - H0) * pxh; } return; }
+  if (low) { LOW = { pxh: pxh, H0: H0 }; if (!HOMED2) { HOMED2 = true; document.getElementById('scroll2').scrollLeft = 0; } return; }
   if (!HOMED) { HOMED = true; document.querySelector('.scroll').scrollLeft = FIT_HOURS < 0 ? (d.NOW + 0.5 - H0) * PXH - NOW_ROOM * ZOOM : (HOME - H0) * PXH; }
   placeNow();
 }
