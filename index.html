@@ -118,7 +118,7 @@ var PLACE = 'NW5 London', LAT = 51.553, LON = -0.142, TZ = 'Europe/London', HOME
 var DAYS = 14;                   // number of days to chart, starting today (the 7d button shows 7 of them, slide for the rest)
 var ZOOM = 1.3;                  // screen px per chart unit: bigger = larger text
 var FIT_HOURS = -1;              // hours across the screen: the "Now" view when the app opens, then whatever the buttons on top set (0 = the whole week, -1 = from now to 21:00 or sunset if later, or from 20:00 to an hour past tomorrow's sunrise)
-var BUILD = '2026-10-22b';       // change on every release: a page still running an older build reloads itself
+var BUILD = '2026-10-22c';       // change on every release: a page still running an older build reloads itself
 var PXH_MAX = 47;                // most screen px per hour when pinching in (pinching out stops when the whole week is on screen)
 var RAIN_SPLIT = 0.208;         // share of the panels' height given to the rain panel at the top (temperature and wind share the rest)
 var WARM = 18;                   // °C: the band between temperature and feels-like is drawn darker above this level
@@ -461,7 +461,7 @@ function drawWeek(d, low) {
     if (k < d.TODAY || (k + 1) * 24 <= H0) return;
     var lx = x(k * 24 + 11.5), ly = WF - 24;
     out += '<g transform="translate(' + (lx - 15) + ',' + ly + ') scale(0.3)" fill="none" stroke-width="10" stroke-linecap="round">' +
-      '<path d="M6,30 Q20,12 34,30 Q48,48 62,30 Q76,12 90,30" stroke="#4aa8ff"/><path d="M6,56 Q20,38 34,56 Q48,74 62,56 Q76,38 90,56" stroke="#6fbcff"/></g>' +
+      '<path d="M6,30 Q20,12 34,30 Q48,48 62,30 Q76,12 90,30" stroke="#1f7fd6"/><path d="M6,56 Q20,38 34,56 Q48,74 62,56 Q76,38 90,56" stroke="#3a98ea"/></g>' +
       '<text x="' + lx + '" y="' + (ly + 16.5) + '" text-anchor="middle" font-size="11" font-weight="700" fill="#fff" stroke="#0a3a66" stroke-opacity="0.75" stroke-width="2.4" stroke-linejoin="round" paint-order="stroke" ' + mono + '>' + Math.floor(w + 1e-6) + '°</text>';
   });
   // current-time marker with a small tag of the conditions right now (interpolated between the hourly values)
@@ -546,7 +546,7 @@ function placeNow() {
   }).join('') + '<div style="left:3px;top:' + (v.RTOP + 3) * ZOOM + 'px;transform:none;flex-direction:column;align-items:flex-start;gap:1px;color:' + v.RC + ';font-size:' + S * 2 / 3 * ZOOM + 'px">' +
     at(d.RAIN) + '%<span style="color:' + v.MARINE + '">' + d.MM[Math.floor(h)] + '<small>mm/h</small></span></div>' +   // the chance above the amount
     (v.POOL.length ? '<div style="right:3px;top:' + (v.T + v.ihU - 50) * ZOOM + 'px;transform:none"><svg width="' + 40 * ZOOM + '" height="' + 32 * ZOOM + '" viewBox="0 6 100 80">' +
-      '<g fill="none" stroke-width="12" stroke-linecap="round"><path d="M6,30 Q20,12 34,30 Q48,48 62,30 Q76,12 90,30" stroke="#4aa8ff"/><path d="M6,56 Q20,38 34,56 Q48,74 62,56 Q76,38 90,56" stroke="#6fbcff"/></g>' +
+      '<g fill="none" stroke-width="12" stroke-linecap="round"><path d="M6,30 Q20,12 34,30 Q48,48 62,30 Q76,12 90,30" stroke="#1f7fd6"/><path d="M6,56 Q20,38 34,56 Q48,74 62,56 Q76,38 90,56" stroke="#3a98ea"/></g>' +
       '<text x="50" y="55" text-anchor="middle" font-size="36" font-weight="700" fill="#fff" stroke="#0a3a66" stroke-opacity="0.75" stroke-width="4" stroke-linejoin="round" paint-order="stroke">' + Math.floor(v.POOL[k] + 1e-6) + '°</text></svg></div>' : '');
 }
 document.querySelector('.scroll').addEventListener('scroll', function () { SLID = Date.now(); placeNow(); }, { passive: true });
