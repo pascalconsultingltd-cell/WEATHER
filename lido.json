@@ -1,11 +1,11 @@
 {
-  "date": "2026-10-19",
+  "date": "2026-10-26",
   "source": "https://www.cityoflondon.gov.uk/things-to-do/green-spaces/hampstead-heath/activities-at-hampstead-heath/swimming-at-hampstead-heath/water-temperatures",
-  "lido": 13,
-  "ladies": 13,
-  "mens": 14,
-  "mixed": 13,
-  "estimate": 12.4,
+  "lido": 10,
+  "ladies": 11,
+  "mens": 12,
+  "mixed": null,
+  "estimate": 10.7,
   "estimate_date": "2026-10-27",
   "status": "we are open as usual",
   "hours": {
