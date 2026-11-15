@@ -5,6 +5,8 @@
   "ladies": 9,
   "mens": 10,
   "mixed": null,
+  "estimate": 7.9,
+  "estimate_date": "2026-11-15",
   "status": "we are open as usual",
   "hours": {
     "season": "Winter",
